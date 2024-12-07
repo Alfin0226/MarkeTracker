@@ -13,7 +13,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app, origins="*", allow_headers="*", supports_credentials=True)
+
+# Configuration for CORS
+allowed_origins = [
+    "http://localhost:3000",  # Local development
+    "https://marketracker.vercel.app"  # Production
+]
+CORS(app, origins=allowed_origins, allow_headers=["Content-Type", "Authorization"], 
+     supports_credentials=True, expose_headers=["Authorization"])
 
 # Configuration
 print("Starting application configuration...")
