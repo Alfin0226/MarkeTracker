@@ -6,6 +6,7 @@ import Register from './pages/Register';
 import StockTracker from './pages/StockTracker';
 import Portfolio from './pages/Portfolio';
 import PrivateRoute from './components/PrivateRoute';
+import {Analytics} from '@vercel/analytics/react';
 
 function App() {
   useEffect(() => {
@@ -13,7 +14,7 @@ function App() {
     localStorage.removeItem('token');
   }, []);
 
-  return (
+  return ( <>
     <Router>
       <div className="App">
         <Navbar />
@@ -40,6 +41,8 @@ function App() {
         </Routes>
       </div>
     </Router>
+    <Analytics />
+    </>
   );
 }
 
