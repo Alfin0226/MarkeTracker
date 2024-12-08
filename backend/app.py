@@ -16,22 +16,11 @@ app = Flask(__name__)
 
 # Configuration for CORS
 CORS(app, 
-     origins=["http://localhost:3000", "https://marketracker.vercel.app", "https://*.marketracker.vercel.app"],
+     origins='*',
      methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-     allow_headers=["Content-Type", "Authorization", "Access-Control-Allow-Origin"],
+     allow_headers=["Content-Type", "Authorization"],
      supports_credentials=True,
-     expose_headers=["Authorization"],
-     max_age=3600,
-     allow_credentials=True)
-
-@app.after_request
-def after_request(response):
-    if request.headers.get('Origin', '').startswith('https://marketracker.vercel.app'):
-        response.headers.add('Access-Control-Allow-Origin', request.headers['Origin'])
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
-    return response
+     expose_headers=["Authorization"])
 
 # Configuration
 print("Starting application configuration...")
