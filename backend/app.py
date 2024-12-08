@@ -14,13 +14,18 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# Configuration for CORS
-CORS(app, 
-     origins='*',
-     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-     allow_headers=["Content-Type", "Authorization"],
-     supports_credentials=True,
-     expose_headers=["Authorization"])
+@app.after_request
+def after_request(response):
+    origin = request.headers.get('Origin')
+    if origin:
+        response.headers.add('Access-Control-Allow-Origin', origin)
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+    return response
+
+# Basic CORS setup
+CORS(app)
 
 # Configuration
 print("Starting application configuration...")
