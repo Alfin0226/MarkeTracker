@@ -14,28 +14,27 @@ load_dotenv()
 app = Flask(__name__)
 
 # Configure CORS
-CORS(app, 
-     resources={
-         r"/api/*": {
-             "origins": [
-                 "http://localhost:3000",
-                 "https://marke-tracker.vercel.app",
-                 "https://marke-tracker-git-main-hi123456s-projects.vercel.app"
-             ],
-             "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-             "allow_headers": ["Content-Type", "Authorization"],
-             "expose_headers": ["Authorization"],
-             "supports_credentials": True
-         }
-     })
+CORS(app, resources={
+    r"/api/*": {
+        "origins": [
+            "http://localhost:3000",
+            "http://localhost:5173",
+            "https://marketracker.vercel.app"
+        ],
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"],
+        "supports_credentials": True
+    }
+})
 
-# Set additional CORS headers for all responses
 @app.after_request
 def after_request(response):
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    origin = request.headers.get('Origin')
+    if origin in ['http://localhost:3000', 'https://marketracker.vercel.app']:
+        response.headers.add('Access-Control-Allow-Origin', origin)
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
     return response
 
 # Configuration
