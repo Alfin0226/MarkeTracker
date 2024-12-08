@@ -151,20 +151,22 @@ def init_db():
             
             # Initialize sequences
             with db.engine.connect() as conn:
-                # Get current max transaction ID
+                # Initialize portfolio sequence
+                result = conn.execute(text('SELECT MAX(id) FROM portfolio'))
+                max_id = result.scalar() or 0
+                conn.execute(text('ALTER TABLE portfolio ALTER COLUMN id DROP DEFAULT'))
+                conn.execute(text('DROP SEQUENCE IF EXISTS portfolio_id_seq'))
+                conn.execute(text(f'CREATE SEQUENCE portfolio_id_seq START WITH {max_id + 1}'))
+                conn.execute(text('ALTER TABLE portfolio ALTER COLUMN id SET DEFAULT nextval(\'portfolio_id_seq\')'))
+                print(f"Initialized portfolio sequence starting at {max_id + 1}")
+                
+                # Initialize transaction sequence
                 result = conn.execute(text('SELECT MAX(id) FROM transaction'))
                 max_id = result.scalar() or 0
-                
-                # Remove the default value constraint first
                 conn.execute(text('ALTER TABLE transaction ALTER COLUMN id DROP DEFAULT'))
-                
-                # Now we can safely drop and recreate the sequence
                 conn.execute(text('DROP SEQUENCE IF EXISTS transaction_id_seq'))
                 conn.execute(text(f'CREATE SEQUENCE transaction_id_seq START WITH {max_id + 1}'))
-                
-                # Set the new sequence as the default
                 conn.execute(text('ALTER TABLE transaction ALTER COLUMN id SET DEFAULT nextval(\'transaction_id_seq\')'))
-                
                 print(f"Initialized transaction sequence starting at {max_id + 1}")
                 
         except Exception as e:
