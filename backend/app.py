@@ -15,7 +15,7 @@ app = Flask(__name__)
 
 # Configure CORS
 CORS(app, resources={
-    r"/*": {  
+    r"/*": {  # All routes
         "origins": [
             "http://localhost:3000",
             "http://localhost:5173",
@@ -24,7 +24,9 @@ CORS(app, resources={
         ],
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"],
-        "supports_credentials": True
+        "expose_headers": ["Authorization"],
+        "supports_credentials": True,
+        "max_age": 600  # Cache preflight requests for 10 minutes
     }
 })
 
@@ -43,6 +45,11 @@ def after_request(response):
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
         response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
         response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Max-Age"] = "600"  # Cache preflight requests
+        
+        # Handle preflight requests
+        if request.method == 'OPTIONS':
+            return response
     return response
 
 # Configuration
@@ -248,7 +255,7 @@ def login():
     
     return jsonify({'error': 'Invalid credentials'}), 401
 
-@app.route('/stock/<symbol>', methods=['GET'])
+@app.route('/api/stock/<symbol>', methods=['GET'])
 def get_stock_data(symbol):
     try:
         period = request.args.get('period', '1d')
