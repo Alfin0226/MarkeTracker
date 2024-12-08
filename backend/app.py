@@ -14,15 +14,24 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# Enable CORS for all routes
-CORS(app, resources={
-    r"/*": {
-        "origins": ["http://localhost:3000", "http://127.0.0.1:3000", "https://marketracker.vercel.app"],
-        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization"],
-        "supports_credentials": True
-    }
-})
+# Configure CORS
+CORS(app, 
+     resources={
+         r"/*": {
+             "origins": ["http://localhost:3000", "http://127.0.0.1:3000","https://marketracker.vercel.app"],
+             "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+             "allow_headers": ["Content-Type", "Authorization"],
+             "supports_credentials": True
+         }
+     })
+
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Origin', 'http://localhost:3000')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    return response
 
 # Configuration
 print("Starting application configuration...")
@@ -203,13 +212,13 @@ def login():
     
     return jsonify({'error': 'Invalid credentials'}), 401
 
-@app.route('/api/stock/<symbol>')
+@app.route('/stock/<symbol>', methods=['GET'])
 def get_stock_data(symbol):
-    period = request.args.get('period', '1d')
-    interval = request.args.get('interval', '5m')
-    stock = yf.Ticker(symbol)
-    
     try:
+        period = request.args.get('period', '1d')
+        interval = request.args.get('interval', '5m')
+        stock = yf.Ticker(symbol)
+        
         # Get historical data with interval
         hist = stock.history(period=period, interval=interval)
         
@@ -225,6 +234,7 @@ def get_stock_data(symbol):
         
         return jsonify(data)
     except Exception as e:
+        print(f"Error fetching stock data: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/portfolio', methods=['GET'])
