@@ -17,8 +17,17 @@ function Login() {
     setError('');
     try {
       const response = await login({ email, password });
-      localStorage.setItem('token', response.token);
-      navigate('/portfolio');
+      console.log('Login response:', response);
+      
+      // Check for either token format
+      const token = response.token || response.access_token;
+      if (token) {
+        localStorage.setItem('token', token);
+        navigate('/portfolio');
+      } else {
+        setError('Invalid server response');
+        console.error('No token in response:', response);
+      }
     } catch (err) {
       const errorMessage = err.response?.data?.error || 'Invalid credentials';
       setError(errorMessage);

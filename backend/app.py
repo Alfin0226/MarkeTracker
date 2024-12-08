@@ -2,11 +2,10 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 import yfinance as yf
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import bcrypt
 from database import db
 from models import User, Portfolio, Transaction
-from datetime import datetime
 from sqlalchemy import text
 import os
 from dotenv import load_dotenv
@@ -17,24 +16,26 @@ app = Flask(__name__)
 # Configure CORS
 CORS(app, 
      resources={
-         r"/*": {
-             "origins": ["http://localhost:3000", "http://127.0.0.1:3000","https://marketracker.vercel.app"],
+         r"/api/*": {
+             "origins": [
+                 "http://localhost:3000",
+                 "https://marke-tracker.vercel.app",
+                 "https://marke-tracker-git-main-hi123456s-projects.vercel.app"
+             ],
              "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
              "allow_headers": ["Content-Type", "Authorization"],
+             "expose_headers": ["Authorization"],
              "supports_credentials": True
          }
      })
 
+# Set additional CORS headers for all responses
 @app.after_request
 def after_request(response):
-    origin = request.headers.get('Origin')
-    allowed_origins = ["http://localhost:3000", "http://127.0.0.1:3000", "https://marketracker.vercel.app"]
-    
-    if origin in allowed_origins:
-        response.headers['Access-Control-Allow-Origin'] = origin
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization'
-        response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,POST,DELETE,OPTIONS'
-        response.headers['Access-Control-Allow-Credentials'] = 'true'
+    response.headers.add('Access-Control-Allow-Origin', 'http://localhost:3000')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
     return response
 
 # Configuration
@@ -144,19 +145,37 @@ def unauthorized_callback(error):
 
 # Ensure database tables exist
 def init_db():
+    """Initialize the database and sequences"""
     with app.app_context():
         try:
-            # Verify database connection
-            db.session.execute(text('SELECT 1'))
-            print("Database connection verified")
+            db.create_all()
             
-            # Commit any pending transactions
-            db.session.commit()
+            # Initialize sequences
+            with db.engine.connect() as conn:
+                # Get current max transaction ID
+                result = conn.execute(text('SELECT MAX(id) FROM transaction'))
+                max_id = result.scalar() or 0
+                
+                # Remove the default value constraint first
+                conn.execute(text('ALTER TABLE transaction ALTER COLUMN id DROP DEFAULT'))
+                
+                # Now we can safely drop and recreate the sequence
+                conn.execute(text('DROP SEQUENCE IF EXISTS transaction_id_seq'))
+                conn.execute(text(f'CREATE SEQUENCE transaction_id_seq START WITH {max_id + 1}'))
+                
+                # Set the new sequence as the default
+                conn.execute(text('ALTER TABLE transaction ALTER COLUMN id SET DEFAULT nextval(\'transaction_id_seq\')'))
+                
+                print(f"Initialized transaction sequence starting at {max_id + 1}")
+                
         except Exception as e:
-            print(f"Error initializing database: {e}")
-            db.session.rollback()
-            raise
+            print(f"Error during database initialization: {str(e)}")
+            if 'relation "transaction" does not exist' in str(e):
+                # If table doesn't exist yet, create it first
+                db.create_all()
+                init_db()  # Try again after creating tables
 
+# Initialize database and sequences
 init_db()
 
 @app.route('/api/register', methods=['POST'])
@@ -203,15 +222,19 @@ def login():
         try:
             password_matches = bcrypt.checkpw(data['password'].encode('utf-8'), user.password)
             print(f"Password match: {password_matches}")
+            
         except Exception as e:
             print(f"Error checking password: {str(e)}")
             return jsonify({'error': 'Server error during login'}), 500
             
         if password_matches:
-            access_token = create_access_token(identity=str(user.id))
+            access_token = create_access_token(identity=str(user.email))
             return jsonify({
-                'token': access_token,
-                'user_id': str(user.id)
+                'access_token': access_token,
+                'user': {
+                    'email': user.email,
+                    'virtual_balance': user.virtual_balance
+                }
             }), 200
     
     return jsonify({'error': 'Invalid credentials'}), 401
@@ -245,38 +268,20 @@ def get_stock_data(symbol):
 @jwt_required()
 def get_portfolio():
     try:
-        # Get and validate user ID from token
-        user_id = get_jwt_identity()
-        if not user_id:
-            print("No user ID in token")
-            return jsonify({'error': 'Invalid token'}), 422
+        # Get email from JWT token
+        email = get_jwt_identity()
+        print(f"Getting portfolio for email: {email}")
         
-        # Convert string user_id back to integer
-        try:
-            user_id = int(user_id)
-        except ValueError:
-            print("Invalid user ID format in token")
-            return jsonify({'error': 'Invalid token format'}), 422
-        
-        print(f"Processing portfolio request for user {user_id}")
-        print("Headers:", dict(request.headers))
-        
-        # Verify database connection
-        try:
-            db.session.execute(text('SELECT 1'))
-            print("Database connection verified")
-        except Exception as e:
-            print(f"Database connection error: {e}")
-            return jsonify({'error': 'Database connection error'}), 500
-        
-        # Check if user exists
-        user = User.query.get(user_id)
+        # Find user by email
+        user = User.query.filter_by(email=email).first()
         if not user:
-            print(f"User {user_id} not found in database")
+            print(f"No user found for email: {email}")
             return jsonify({'error': 'User not found'}), 404
             
+        print(f"Found user ID: {user.id}")
+        
         # Get portfolio items
-        portfolio_items = Portfolio.query.filter_by(user_id=user_id).all()
+        portfolio_items = Portfolio.query.filter_by(user_id=user.id).all()
         print(f"Found {len(portfolio_items)} portfolio items")
         
         # Initialize response data
@@ -346,106 +351,173 @@ def get_portfolio():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
+def get_stock_price(symbol):
+    """Get current stock price with multiple fallback methods"""
+    try:
+        stock = yf.Ticker(symbol)
+        
+        # Method 1: Try regular market price
+        price = stock.info.get('regularMarketPrice')
+        if price:
+            return price
+            
+        # Method 2: Try current price
+        price = stock.info.get('currentPrice')
+        if price:
+            return price
+            
+        # Method 3: Try last close price from history
+        hist = stock.history(period='1d')
+        if not hist.empty and 'Close' in hist.columns:
+            return float(hist['Close'].iloc[-1])
+            
+        # Method 4: Try fast info
+        fast_info = stock.fast_info
+        if hasattr(fast_info, 'last_price') and fast_info.last_price:
+            return float(fast_info.last_price)
+            
+        raise ValueError(f"Could not fetch price for {symbol} using any method")
+        
+    except Exception as e:
+        print(f"Error fetching price for {symbol}: {str(e)}")
+        raise ValueError(f"Failed to fetch price for {symbol}: {str(e)}")
+
 @app.route('/api/trade', methods=['POST'])
 @jwt_required()
 def trade():
-    user_id = get_jwt_identity()
-    data = request.get_json()
-    
     try:
-        user = User.query.get(user_id)
-        stock = yf.Ticker(data['symbol'])
+        # Get email from JWT token
+        email = get_jwt_identity()
+        print(f"Processing trade for email: {email}")
         
-        # Try different methods to get the current price
-        current_price = None
+        # Find user by email
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            print(f"No user found for email: {email}")
+            return jsonify({'error': 'User not found'}), 404
+            
+        print(f"Found user ID: {user.id}")
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+            
+        if 'symbol' not in data or 'action' not in data or 'shares' not in data:
+            return jsonify({'error': 'Missing required fields'}), 400
+            
         try:
-            current_price = stock.info.get('regularMarketPrice')
-            if current_price is None:
-                current_price = stock.info.get('currentPrice')
-            if current_price is None:
-                hist = stock.history(period='1d')
-                if not hist.empty:
-                    current_price = hist['Close'].iloc[-1]
+            shares = int(data['shares'])
+            if shares <= 0:
+                return jsonify({'error': 'Number of shares must be positive'}), 400
+        except ValueError:
+            return jsonify({'error': 'Invalid number of shares'}), 400
+        
+        try:
+            current_price = get_stock_price(data['symbol'])
+            print(f"Fetched price for {data['symbol']}: ${current_price}")
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 400
         except Exception as e:
-            print(f"Error fetching price for {data['symbol']}: {str(e)}")
+            print(f"Unexpected error fetching price: {str(e)}")
+            return jsonify({'error': 'Failed to fetch stock price'}), 500
             
-        if current_price is None:
-            return jsonify({'error': f'Could not fetch current price for {data["symbol"]}'}), 400
-            
-        shares = int(data['shares'])
         total_cost = current_price * shares
+        print(f"Calculated total cost: ${total_cost}")
         
-        if data['action'] == 'buy':
-            if total_cost > user.virtual_balance:
-                return jsonify({
-                    'error': f'Insufficient funds. Cost: ${total_cost:.2f}, Balance: ${user.virtual_balance:.2f}'
-                }), 400
-            
-            portfolio_item = Portfolio.query.filter_by(
-                user_id=user_id, symbol=data['symbol']).first()
-            
-            if portfolio_item:
-                new_shares = portfolio_item.shares + shares
-                new_avg_price = ((portfolio_item.average_price * portfolio_item.shares) + 
-                               (current_price * shares)) / new_shares
-                portfolio_item.shares = new_shares
-                portfolio_item.average_price = new_avg_price
-            else:
-                portfolio_item = Portfolio(
-                    user_id=user_id,
-                    symbol=data['symbol'],
-                    shares=shares,
-                    average_price=current_price
-                )
-                db.session.add(portfolio_item)
-            
-            user.virtual_balance -= total_cost
-            
-        elif data['action'] == 'sell':
-            portfolio_item = Portfolio.query.filter_by(
-                user_id=user_id, symbol=data['symbol']).first()
-            
-            if not portfolio_item:
-                return jsonify({'error': 'You do not own this stock'}), 400
+        # Start transaction
+        db.session.begin_nested()
+        
+        try:
+            if data['action'] == 'buy':
+                if total_cost > user.virtual_balance:
+                    db.session.rollback()
+                    return jsonify({
+                        'error': 'Insufficient funds',
+                        'required': total_cost,
+                        'available': user.virtual_balance
+                    }), 400
                 
-            if portfolio_item.shares < shares:
+                portfolio_item = Portfolio.query.filter_by(
+                    user_id=user.id, symbol=data['symbol']).first()
+                
+                if portfolio_item:
+                    new_shares = portfolio_item.shares + shares
+                    new_avg_price = ((portfolio_item.shares * portfolio_item.average_price) + 
+                                   (shares * current_price)) / new_shares
+                    portfolio_item.shares = new_shares
+                    portfolio_item.average_price = new_avg_price
+                else:
+                    portfolio_item = Portfolio(
+                        user_id=user.id,
+                        symbol=data['symbol'],
+                        shares=shares,
+                        average_price=current_price
+                    )
+                    db.session.add(portfolio_item)
+                
+                user.virtual_balance -= total_cost
+                print(f"Updated user balance: ${user.virtual_balance}")
+                
+            elif data['action'] == 'sell':
+                portfolio_item = Portfolio.query.filter_by(
+                    user_id=user.id, symbol=data['symbol']).first()
+                
+                if not portfolio_item:
+                    db.session.rollback()
+                    return jsonify({'error': 'You do not own this stock'}), 400
+                    
+                if shares > portfolio_item.shares:
+                    db.session.rollback()
+                    return jsonify({'error': 'Not enough shares to sell'}), 400
+                    
+                user.virtual_balance += total_cost
+                print(f"Updated user balance: ${user.virtual_balance}")
+                
+                if shares == portfolio_item.shares:
+                    db.session.delete(portfolio_item)
+                else:
+                    portfolio_item.shares -= shares
+            
+            # Create transaction record
+            transaction = Transaction(
+                user_id=user.id,
+                symbol=data['symbol'],
+                shares=shares,
+                price=current_price,
+                action=data['action'],
+                timestamp=datetime.now(timezone.utc)
+            )
+            
+            db.session.add(transaction)
+            
+            try:
+                db.session.commit()
+                print(f"Transaction committed successfully. ID: {transaction.id}")
+                
                 return jsonify({
-                    'error': f'Insufficient shares. You own {portfolio_item.shares} shares'
-                }), 400
+                    'message': f'Successfully executed {data["action"]} order',
+                    'transaction': {
+                        'symbol': data['symbol'],
+                        'shares': shares,
+                        'price': current_price,
+                        'total': total_cost,
+                        'new_balance': user.virtual_balance
+                    }
+                })
+                
+            except Exception as e:
+                db.session.rollback()
+                print(f"Error committing transaction: {str(e)}")
+                return jsonify({'error': 'Database error while executing trade'}), 500
+                
+        except Exception as e:
+            db.session.rollback()
+            print(f"Error during trade execution: {str(e)}")
+            return jsonify({'error': 'Failed to execute trade'}), 500
             
-            portfolio_item.shares -= shares
-            user.virtual_balance += total_cost
-            
-            if portfolio_item.shares == 0:
-                db.session.delete(portfolio_item)
-        
-        transaction = Transaction(
-            user_id=user_id,
-            symbol=data['symbol'],
-            shares=shares,
-            price=current_price,
-            action=data['action']
-        )
-        
-        db.session.add(transaction)
-        db.session.commit()
-        
-        return jsonify({
-            'message': 'Trade executed successfully',
-            'new_balance': user.virtual_balance,
-            'transaction': {
-                'symbol': data['symbol'],
-                'shares': shares,
-                'price': current_price,
-                'total': total_cost,
-                'action': data['action']
-            }
-        })
-        
     except Exception as e:
-        db.session.rollback()
-        print(f"Trade error: {str(e)}")
-        return jsonify({'error': 'Failed to execute trade. Please try again.'}), 500
+        print(f"Unexpected error in trade endpoint: {str(e)}")
+        return jsonify({'error': 'An unexpected error occurred'}), 500
 
 @app.route('/api/test-auth', methods=['GET'])
 @jwt_required()

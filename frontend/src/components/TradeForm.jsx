@@ -23,15 +23,29 @@ function TradeForm({ onTradeComplete }) {
         action: tradeAction
       });
       
-      setTradeSymbol('');
-      setTradeShares('');
-      alert(`Trade executed successfully!\n${response.transaction.action.toUpperCase()}: ${response.transaction.shares} shares of ${response.transaction.symbol} at $${response.transaction.price.toFixed(2)}`);
+      console.log('Trade response:', response);
       
-      if (onTradeComplete) {
-        onTradeComplete();
+      if (response.transaction) {
+        setTradeSymbol('');
+        setTradeShares('');
+        const action = response.transaction.action || tradeAction;
+        const message = `${action.toUpperCase()}: ${response.transaction.shares} shares of ${response.transaction.symbol} at $${response.transaction.price.toFixed(2)}\nNew Balance: $${response.transaction.new_balance.toFixed(2)}`;
+        alert('Trade executed successfully!\n' + message);
+        
+        if (onTradeComplete) {
+          onTradeComplete();
+        }
+      } else {
+        setTradeError('Invalid response from server');
+        console.error('Invalid trade response:', response);
       }
     } catch (error) {
-      setTradeError(error.response?.data?.error || 'Error executing trade');
+      console.error('Trade error:', error);
+      const errorMessage = error.response?.data?.error || 
+                         (error.response?.data?.details) ||
+                         error.message ||
+                         'An unexpected error occurred while executing the trade';
+      setTradeError(errorMessage);
     }
   };
 
@@ -39,7 +53,9 @@ function TradeForm({ onTradeComplete }) {
     <div className="col">
       <h3>Execute Trade</h3>
       {tradeError && (
-        <div className="alert alert-danger">{tradeError}</div>
+        <div className="alert alert-danger">
+          <strong>Error: </strong>{tradeError}
+        </div>
       )}
       <form onSubmit={handleTrade}>
         <div className="mb-3">
