@@ -1,6 +1,6 @@
 # MarketTracker
 
-## LINKS
+## LINK
 https://marketracker.vercel.app/register
 
 MarketTracker is a beginner-friendly web-based investment portfolio tracking platform. It helps users monitor and manage investments across stocks, cryptocurrencies, and indices in real-time. The platform also provides a simulated trading environment, allowing users to learn and practice investing without any financial risk.
