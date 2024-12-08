@@ -15,11 +15,12 @@ app = Flask(__name__)
 
 # Configure CORS
 CORS(app, resources={
-    r"/api/*": {
+    r"/*": {  
         "origins": [
             "http://localhost:3000",
             "http://localhost:5173",
-            "https://marketracker.vercel.app"
+            "https://marketracker.vercel.app",
+            "https://backend-theta-roan-61.vercel.app"
         ],
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"],
@@ -30,11 +31,18 @@ CORS(app, resources={
 @app.after_request
 def after_request(response):
     origin = request.headers.get('Origin')
-    if origin in ['http://localhost:3000', 'https://marketracker.vercel.app']:
-        response.headers.add('Access-Control-Allow-Origin', origin)
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
+    allowed_origins = [
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "https://marketracker.vercel.app",
+        "https://backend-theta-roan-61.vercel.app"
+    ]
+    
+    if origin in allowed_origins:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+        response.headers["Access-Control-Allow-Credentials"] = "true"
     return response
 
 # Configuration
