@@ -15,19 +15,49 @@ function PortfolioTable({ portfolio }) {
       </thead>
       <tbody>
         {portfolio?.portfolio?.length > 0 ? (
-          portfolio.portfolio.map((position) => (
-            <tr key={position.symbol}>
-              <td>{position.symbol}</td>
-              <td>{position.shares}</td>
-              <td>${position.avg_price.toFixed(2)}</td>
-              <td>${position.current_price.toFixed(2)}</td>
-              <td>${position.value.toFixed(2)}</td>
-              <td className={position.gain_loss >= 0 ? 'text-success' : 'text-danger'}>
-                ${position.gain_loss.toFixed(2)}
-                ({((position.gain_loss / (position.avg_price * position.shares)) * 100).toFixed(2)}%)
-              </td>
-            </tr>
-          ))
+          portfolio.portfolio.map((position) => {
+            // Defensive checks for all number fields
+            const avgPrice =
+              position.avg_price !== undefined && position.avg_price !== null
+                ? position.avg_price.toFixed(2)
+                : 'N/A';
+            const currentPrice =
+              position.current_price !== undefined && position.current_price !== null
+                ? position.current_price.toFixed(2)
+                : position.error
+                  ? `Error: ${position.error}`
+                  : 'Unavailable';
+            const value =
+              position.current_price !== undefined && position.current_price !== null &&
+              position.shares !== undefined && position.shares !== null
+                ? (position.current_price * position.shares).toFixed(2)
+                : 'N/A';
+            const gainLoss =
+              position.current_price !== undefined && position.current_price !== null &&
+              position.avg_price !== undefined && position.avg_price !== null &&
+              position.shares !== undefined && position.shares !== null
+                ? ((position.current_price - position.avg_price) * position.shares).toFixed(2)
+                : 'N/A';
+            const gainLossPct =
+              position.current_price !== undefined && position.current_price !== null &&
+              position.avg_price !== undefined && position.avg_price !== null &&
+              position.shares !== undefined && position.shares !== null && position.avg_price * position.shares !== 0
+                ? (((position.current_price - position.avg_price) / position.avg_price) * 100).toFixed(2)
+                : 'N/A';
+            return (
+              <tr key={position.symbol}>
+                <td>{position.symbol}</td>
+                <td>{position.shares}</td>
+                <td>{avgPrice}</td>
+                <td>{currentPrice}</td>
+                <td>{value}</td>
+                <td className={gainLoss !== 'N/A' && parseFloat(gainLoss) >= 0 ? 'text-success' : 'text-danger'}>
+                  {gainLoss}
+                  {gainLossPct !== 'N/A' && gainLoss !== 'N/A' ? ` (${gainLossPct}%)` : ''}
+                </td>
+              </tr>
+            );
+          })
         ) : (
           <tr>
             <td colSpan="6" className="text-center">No holdings yet</td>
