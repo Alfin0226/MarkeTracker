@@ -14,7 +14,7 @@ const periodMap = {
 };
 
 function StockTracker() {
-  const [symbol, setSymbol] = useState('');
+  const [symbol, setSymbol] = useState(''); 
   const [stockData, setStockData] = useState(null);
   const [period, setPeriod] = useState('1d');
   const [loading, setLoading] = useState(false);
