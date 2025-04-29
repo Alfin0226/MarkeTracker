@@ -194,31 +194,6 @@ def init_db():
 # Initialize database and sequences
 init_db()
 
-import threading
-import time
-
-_yf_cache = {}
-_yf_cache_lock = threading.Lock()
-_YF_CACHE_TTL = 60  # seconds
-
-def get_yf_ticker(symbol):
-    now = time.time()
-    with _yf_cache_lock:
-        entry = _yf_cache.get(symbol)
-        if entry and now - entry['time'] < _YF_CACHE_TTL:
-            return entry['ticker']
-    try:
-        ticker = yf.Ticker(symbol)
-        # Try to fetch info to ensure it's valid and not rate limited
-        _ = ticker.info
-        with _yf_cache_lock:
-            _yf_cache[symbol] = {'ticker': ticker, 'time': now}
-        return ticker
-    except Exception as e:
-        # Optionally, cache the error for a short period
-        print(f"[yfinance cache] Error fetching {symbol}: {e}")
-        raise
-
 @app.route('/api/register', methods=['POST'])
 def register():
     print("Received registration request")
@@ -285,17 +260,21 @@ def get_stock_data(symbol):
     try:
         period = request.args.get('period', '1d')
         interval = request.args.get('interval', '5m')
-        stock = get_yf_ticker(symbol)
+        stock = yf.Ticker(symbol)
+        
         # Get historical data with interval
         hist = stock.history(period=period, interval=interval)
+        
         if hist.empty:
             return jsonify({'error': 'No data available for this period'}), 404
+        
         # Format data for frontend
         data = {
             'prices': hist['Close'].tolist(),
             'dates': hist.index.strftime('%Y-%m-%d %H:%M:%S').tolist(),
             'info': stock.info
         }
+        
         return jsonify(data)
     except Exception as e:
         print(f"Error fetching stock data: {str(e)}")
@@ -305,52 +284,83 @@ def get_stock_data(symbol):
 @jwt_required()
 def get_portfolio():
     try:
+        # Get email from JWT token
         email = get_jwt_identity()
         print(f"Getting portfolio for email: {email}")
+        
+        # Find user by email
         user = User.query.filter_by(email=email).first()
         if not user:
             print(f"No user found for email: {email}")
             return jsonify({'error': 'User not found'}), 404
+            
         print(f"Found user ID: {user.id}")
+        
+        # Get portfolio items
         portfolio_items = Portfolio.query.filter_by(user_id=user.id).all()
+        print(f"Found {len(portfolio_items)} portfolio items")
+        
+        # Initialize response data
         portfolio_data = []
-        total_value = 0.0
-        # --- Only fetch each symbol once per request ---
-        symbol_data = {}
+        total_value = user.virtual_balance
+        
+        # Process each portfolio item
         for item in portfolio_items:
-            symbol = item.symbol
-            if symbol not in symbol_data:
+            try:
+                print(f"Processing {item.symbol}")
+                stock = yf.Ticker(item.symbol)
+                
+                # Get current price
+                current_price = None
                 try:
-                    stock = get_yf_ticker(symbol)
-                    price = stock.info.get('regularMarketPrice')
-                    if not price:
-                        # fallback to currentPrice or last close
-                        price = stock.info.get('currentPrice')
-                        if not price:
-                            hist = stock.history(period='1d')
-                            if not hist.empty and 'Close' in hist.columns:
-                                price = float(hist['Close'].iloc[-1])
-                    symbol_data[symbol] = {'stock': stock, 'price': price}
+                    hist = stock.history(period='1d')
+                    if not hist.empty:
+                        current_price = hist['Close'].iloc[-1]
+                        print(f"Got price from history: {current_price}")
                 except Exception as e:
-                    print(f"Error processing {symbol}: {str(e)}")
-                    symbol_data[symbol] = {'stock': None, 'price': None, 'error': str(e)}
-            data = {
-                'symbol': symbol,
-                'shares': item.shares,
-                'average_price': item.average_price,
-                'current_price': symbol_data[symbol]['price'],
-                'error': symbol_data[symbol].get('error')
-            }
-            if symbol_data[symbol]['price']:
-                total_value += symbol_data[symbol]['price'] * item.shares
-            portfolio_data.append(data)
+                    print(f"Error getting price from history: {e}")
+                    
+                if current_price is None:
+                    try:
+                        current_price = stock.info.get('regularMarketPrice')
+                        print(f"Got price from info: {current_price}")
+                    except Exception as e:
+                        print(f"Error getting price from info: {e}")
+                
+                if current_price is None:
+                    print(f"Could not get price for {item.symbol}")
+                    continue
+                
+                # Calculate values
+                value = item.shares * current_price
+                total_value += value
+                gain_loss = value - (item.average_price * item.shares)
+                
+                # Add to portfolio data
+                portfolio_data.append({
+                    'symbol': item.symbol,
+                    'shares': item.shares,
+                    'avg_price': float(item.average_price),
+                    'current_price': float(current_price),
+                    'value': float(value),
+                    'gain_loss': float(gain_loss)
+                })
+                print(f"Added {item.symbol} to portfolio data")
+                
+            except Exception as e:
+                print(f"Error processing {item.symbol}: {str(e)}")
+                continue
+        
+        # Prepare response
         response_data = {
             'portfolio': portfolio_data,
             'total_value': float(total_value),
             'cash_balance': float(user.virtual_balance)
         }
+        
         print("Final response data:", response_data)
         return jsonify(response_data)
+        
     except Exception as e:
         print(f"Portfolio error: {str(e)}")
         import traceback
@@ -358,22 +368,32 @@ def get_portfolio():
         return jsonify({'error': str(e)}), 500
 
 def get_stock_price(symbol):
-    """Get current stock price with multiple fallback methods and cache."""
+    """Get current stock price with multiple fallback methods"""
     try:
-        stock = get_yf_ticker(symbol)
+        stock = yf.Ticker(symbol)
+        
+        # Method 1: Try regular market price
         price = stock.info.get('regularMarketPrice')
         if price:
             return price
+            
+        # Method 2: Try current price
         price = stock.info.get('currentPrice')
         if price:
             return price
+            
+        # Method 3: Try last close price from history
         hist = stock.history(period='1d')
         if not hist.empty and 'Close' in hist.columns:
             return float(hist['Close'].iloc[-1])
-        fast_info = getattr(stock, 'fast_info', None)
-        if fast_info and hasattr(fast_info, 'last_price') and fast_info.last_price:
+            
+        # Method 4: Try fast info
+        fast_info = stock.fast_info
+        if hasattr(fast_info, 'last_price') and fast_info.last_price:
             return float(fast_info.last_price)
+            
         raise ValueError(f"Could not fetch price for {symbol} using any method")
+        
     except Exception as e:
         print(f"Error fetching price for {symbol}: {str(e)}")
         raise ValueError(f"Failed to fetch price for {symbol}: {str(e)}")
@@ -382,24 +402,32 @@ def get_stock_price(symbol):
 @jwt_required()
 def trade():
     try:
+        # Get email from JWT token
         email = get_jwt_identity()
         print(f"Processing trade for email: {email}")
+        
+        # Find user by email
         user = User.query.filter_by(email=email).first()
         if not user:
             print(f"No user found for email: {email}")
             return jsonify({'error': 'User not found'}), 404
+            
         print(f"Found user ID: {user.id}")
+        
         data = request.get_json()
         if not data:
             return jsonify({'error': 'No data provided'}), 400
+            
         if 'symbol' not in data or 'action' not in data or 'shares' not in data:
             return jsonify({'error': 'Missing required fields'}), 400
+            
         try:
             shares = int(data['shares'])
             if shares <= 0:
                 return jsonify({'error': 'Number of shares must be positive'}), 400
         except ValueError:
             return jsonify({'error': 'Invalid number of shares'}), 400
+        
         try:
             current_price = get_stock_price(data['symbol'])
             print(f"Fetched price for {data['symbol']}: ${current_price}")
@@ -408,9 +436,13 @@ def trade():
         except Exception as e:
             print(f"Unexpected error fetching price: {str(e)}")
             return jsonify({'error': 'Failed to fetch stock price'}), 500
+            
         total_cost = current_price * shares
         print(f"Calculated total cost: ${total_cost}")
+        
+        # Start transaction
         db.session.begin_nested()
+        
         try:
             if data['action'] == 'buy':
                 if total_cost > user.virtual_balance:
@@ -420,8 +452,10 @@ def trade():
                         'required': total_cost,
                         'available': user.virtual_balance
                     }), 400
+                
                 portfolio_item = Portfolio.query.filter_by(
                     user_id=user.id, symbol=data['symbol']).first()
+                
                 if portfolio_item:
                     new_shares = portfolio_item.shares + shares
                     new_avg_price = ((portfolio_item.shares * portfolio_item.average_price) + 
@@ -436,23 +470,31 @@ def trade():
                         average_price=current_price
                     )
                     db.session.add(portfolio_item)
+                
                 user.virtual_balance -= total_cost
                 print(f"Updated user balance: ${user.virtual_balance}")
+                
             elif data['action'] == 'sell':
                 portfolio_item = Portfolio.query.filter_by(
                     user_id=user.id, symbol=data['symbol']).first()
+                
                 if not portfolio_item:
                     db.session.rollback()
                     return jsonify({'error': 'You do not own this stock'}), 400
+                    
                 if shares > portfolio_item.shares:
                     db.session.rollback()
                     return jsonify({'error': 'Not enough shares to sell'}), 400
+                    
                 user.virtual_balance += total_cost
                 print(f"Updated user balance: ${user.virtual_balance}")
+                
                 if shares == portfolio_item.shares:
                     db.session.delete(portfolio_item)
                 else:
                     portfolio_item.shares -= shares
+            
+            # Create transaction record
             transaction = Transaction(
                 user_id=user.id,
                 symbol=data['symbol'],
@@ -461,10 +503,13 @@ def trade():
                 action=data['action'],
                 timestamp=datetime.now(timezone.utc)
             )
+            
             db.session.add(transaction)
+            
             try:
                 db.session.commit()
                 print(f"Transaction committed successfully. ID: {transaction.id}")
+                
                 return jsonify({
                     'message': f'Successfully executed {data["action"]} order',
                     'transaction': {
@@ -475,14 +520,17 @@ def trade():
                         'new_balance': user.virtual_balance
                     }
                 })
+                
             except Exception as e:
                 db.session.rollback()
                 print(f"Error committing transaction: {str(e)}")
                 return jsonify({'error': 'Database error while executing trade'}), 500
+                
         except Exception as e:
             db.session.rollback()
             print(f"Error during trade execution: {str(e)}")
             return jsonify({'error': 'Failed to execute trade'}), 500
+            
     except Exception as e:
         print(f"Unexpected error in trade endpoint: {str(e)}")
         return jsonify({'error': 'An unexpected error occurred'}), 500
