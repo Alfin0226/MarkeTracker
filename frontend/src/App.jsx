@@ -7,6 +7,7 @@ import StockTracker from './pages/StockTracker';
 import Portfolio from './pages/Portfolio';
 import PrivateRoute from './components/PrivateRoute';
 import {Analytics} from '@vercel/analytics/react';
+import LandingPage from './pages/LandingPage';
 
 function App() {
   useEffect(() => {
@@ -37,7 +38,7 @@ function App() {
               </PrivateRoute>
             }
           />
-          <Route path="/" element={<Login />} />
+          <Route path="/" element={<LandingPage />} />
         </Routes>
       </div>
     </Router>
