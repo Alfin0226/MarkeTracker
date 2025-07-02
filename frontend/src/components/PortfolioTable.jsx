@@ -19,12 +19,18 @@ function PortfolioTable({ portfolio }) {
             <tr key={position.symbol}>
               <td>{position.symbol}</td>
               <td>{position.shares}</td>
-              <td>${position.avg_price.toFixed(2)}</td>
-              <td>${position.current_price.toFixed(2)}</td>
-              <td>${position.value.toFixed(2)}</td>
-              <td className={position.gain_loss >= 0 ? 'text-success' : 'text-danger'}>
-                ${position.gain_loss.toFixed(2)}
-                ({((position.gain_loss / (position.avg_price * position.shares)) * 100).toFixed(2)}%)
+              <td>{typeof position.avg_price === 'number' ? `$${position.avg_price.toFixed(2)}` : 'N/A'}</td>
+              <td>{typeof position.current_price === 'number' ? `$${position.current_price.toFixed(2)}` : 'N/A'}</td>
+              <td>{typeof position.value === 'number' ? `$${position.value.toFixed(2)}` : 'N/A'}</td>
+              <td className={typeof position.gain_loss === 'number' ? (position.gain_loss >= 0 ? 'text-success' : 'text-danger') : ''}>
+                {typeof position.gain_loss === 'number' ? (
+                  <>
+                    {`$${position.gain_loss.toFixed(2)} `}
+                    ({((position.gain_loss / (position.avg_price * position.shares)) * 100).toFixed(2)}%)
+                  </>
+                ) : (
+                  'N/A'
+                )}
               </td>
             </tr>
           ))
