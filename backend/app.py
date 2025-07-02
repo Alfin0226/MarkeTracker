@@ -561,7 +561,7 @@ def get_comparison_data(symbol, period="1y"):
     except Exception as e:
         print(f"Error contacting datahandle service: {e}")
         return {"error": "Data service unavailable"}, 503
-
+    
 def get_dashboard_data(symbol):
     url = f"{DATAHANDLE_URL}/api/dashboard/{symbol}"
     try:
