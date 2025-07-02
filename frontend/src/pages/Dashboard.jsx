@@ -162,6 +162,25 @@ const Dashboard = ({ symbol: initialSymbol }) => {
   return (
     <div className="dashboard-container">
       {error && <div className="error">{error}</div>}
+
+      <div className="search-container">
+        <input
+          type="text"
+          className="search-input"
+          placeholder="Search for a stock symbol (e.g., AAPL, GOOGL)..."
+          value={search}
+          onChange={handleSearchChange}
+        />
+        {suggestions.length > 0 && (
+          <ul className="suggestions-list">
+            {suggestions.map((s) => (
+              <li key={s.symbol} onClick={() => handleSuggestionClick(s.symbol)}>
+                <strong>{s.symbol}</strong> - {s.longname}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
       
       {!dashboardData && !error && <div className="loading">Loading Dashboard...</div>}
 

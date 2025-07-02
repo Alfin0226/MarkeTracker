@@ -109,40 +109,35 @@ def api_dashboard(symbol):
     try:
         if not symbol:
             return jsonify({'error': 'No symbol provided'}), 400
+        
         stock = yf.Ticker(symbol)
         stock_info = stock.info
-        longname=stock_info.get("longName")
-        sector = stock_info.get("sector")
-        marketCap=stock_info.get("marketCap",0)
-        industry = stock_info.get("industry", "N/A")
-        website = stock_info.get("website","N/A")
-        PE_ratio = stock_info.get("trailingPE","N/A")
-        Eps = stock_info.get("trailingEps",0)
-        dividend = stock_info.get("dividendYield","N/A")
-        target = stock_info.get("targetMeanPrice")
-        marketCap_string=humanize.intword(marketCap)
-        rating = stock_info.get("averageAnalystRating","N/A")
-        forecast_price = get_price_forecast(symbol)
+
+        # Directly pass most of the info dictionary
+        # The frontend will handle formatting and fallbacks
+        dashboard_data = {key: stock_info.get(key) for key in [
+            'longName', 'sector', 'industry', 'website', 'marketCap',
+            'trailingPE', 'trailingEps', 'dividendYield', 'targetMeanPrice',
+            'averageAnalystRating', 'regularMarketPrice', 'regularMarketOpen',
+            'regularMarketDayHigh', 'regularMarketDayLow', 'regularMarketPreviousClose',
+            'fiftyTwoWeekHigh', 'fiftyTwoWeekLow', 'longBusinessSummary'
+        ]}
+
+        # Add custom-calculated fields
+        dashboard_data['forecast_price'] = get_price_forecast(symbol)
+        
         q_income_stmt = stock.quarterly_income_stmt
-        q_income_stmt.columns = q_income_stmt.columns.strftime('%Y-%m-%d')
-        income_grid_items = create_income_grid_data(q_income_stmt)
+        if not q_income_stmt.empty:
+            q_income_stmt.columns = q_income_stmt.columns.strftime('%Y-%m-%d')
+            dashboard_data['income_grid_items'] = create_income_grid_data(q_income_stmt)
+        else:
+            dashboard_data['income_grid_items'] = []
+
     except Exception as e:
         print(f"Error fetching dashboard data for {symbol}: {str(e)}")
         return jsonify({'error': str(e)}), 500
-    return jsonify({
-        'longname': longname,
-        'sector': sector,
-        'industry': industry,
-        'website': website,
-        'marketCap': marketCap_string,
-        'PE_ratio': PE_ratio,
-        'Eps': Eps,
-        'dividend': dividend,
-        'target': target,
-        'rating': rating,
-        'forecast_price': forecast_price,
-        'income_grid_items': income_grid_items
-    })
+    
+    return jsonify(dashboard_data)
 
 @app.route('/testbackend', methods=['GET'])
 def test_backend():
