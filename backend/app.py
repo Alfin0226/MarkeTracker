@@ -21,6 +21,7 @@ CORS(app, resources={
             "http://localhost:3000",
             "http://localhost:5173",
             "https://marketracker.vercel.app",
+             "https://backend-theta-roan-61.vercel.app",
             os.getenv('DATAHANDLE_URL') # Add Render URL
         ],
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
