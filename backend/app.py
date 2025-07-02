@@ -309,28 +309,7 @@ def get_portfolio():
         for item in portfolio_items:
             try:
                 print(f"Processing {item.symbol}")
-                stock = yf.Ticker(item.symbol)
-                
-                # Get current price
-                current_price = None
-                try:
-                    hist = stock.history(period='1d')
-                    if not hist.empty:
-                        current_price = hist['Close'].iloc[-1]
-                        print(f"Got price from history: {current_price}")
-                except Exception as e:
-                    print(f"Error getting price from history: {e}")
-                    
-                if current_price is None:
-                    try:
-                        current_price = stock.info.get('regularMarketPrice')
-                        print(f"Got price from info: {current_price}")
-                    except Exception as e:
-                        print(f"Error getting price from info: {e}")
-                
-                if current_price is None:
-                    print(f"Could not get price for {item.symbol}")
-                    continue
+                current_price = get_stock_price(item.symbol)
                 
                 # Calculate values
                 value = item.shares * current_price
@@ -348,6 +327,17 @@ def get_portfolio():
                 })
                 print(f"Added {item.symbol} to portfolio data")
                 
+            except ValueError as e:
+                print(f"Could not get price for {item.symbol}: {e}")
+                # Add to portfolio with unavailable price
+                portfolio_data.append({
+                    'symbol': item.symbol,
+                    'shares': item.shares,
+                    'avg_price': float(item.average_price),
+                    'current_price': 'N/A',
+                    'value': 'N/A',
+                    'gain_loss': 'N/A'
+                })
             except Exception as e:
                 print(f"Error processing {item.symbol}: {str(e)}")
                 continue
