@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, g
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 import yfinance as yf
@@ -110,6 +110,16 @@ except Exception as e:
 # Initialize JWT manager
 jwt = JWTManager(app)
 
+# Use a before_request hook to initialize the database.
+# This ensures db.create_all() is called within a proper app context
+# and only once before the first request is processed.
+@app.before_request
+def initialize_database():
+    if not getattr(g, '_database_initialized', False):
+        with app.app_context():
+            db.create_all()
+        g._database_initialized = True
+
 # Add JWT error handlers
 @jwt.invalid_token_loader
 def invalid_token_callback(error):
@@ -134,9 +144,6 @@ def unauthorized_callback(error):
         'error': 'Missing token',
         'message': str(error)
     }), 422
-
-with app.app_context():
-    db.create_all()
 
 @app.route('/api/register', methods=['POST'])
 def register():
