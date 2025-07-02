@@ -8,6 +8,7 @@ import Portfolio from './pages/Portfolio';
 import PrivateRoute from './components/PrivateRoute';
 import {Analytics} from '@vercel/analytics/react';
 import LandingPage from './pages/LandingPage';
+import Dashboard from './pages/Dashboard';
 
 function App() {
   useEffect(() => {
@@ -39,6 +40,7 @@ function App() {
             }
           />
           <Route path="/" element={<LandingPage />} />
+          <Route path="/dashboard" element={<Dashboard />} />
         </Routes>
       </div>
     </Router>
