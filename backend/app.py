@@ -18,7 +18,7 @@ app = Flask(__name__)
 origins = [
     "http://localhost:3000",
     "http://localhost:5173",
-    "https://marketracker.vercel.app"
+    "https://marketracker.vercel.app",
     "https://backend-theta-roan-61.vercel.app",
 ]
 
@@ -29,7 +29,7 @@ if datahandle_url:
 
 # Configure CORS
 CORS(app, resources={
-    r"/*": {
+    r"/api/*": {
         "origins": origins,
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"],
