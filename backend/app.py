@@ -550,7 +550,7 @@ def testingbackend():
     return("<h1>Testing Backend</h1>")
 
 # Set this to your deployed backend-datahandle URL
-DATAHANDLE_URL = os.getenv('DATAHANDLE_URL', 'https://your-datahandle-service.com')
+DATAHANDLE_URL = os.getenv('DATAHANDLE_URL')
 
 def get_comparison_data(symbol, period="1y"):
     url = f"{DATAHANDLE_URL}/api/comparison/{symbol}"
