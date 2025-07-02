@@ -135,42 +135,8 @@ def unauthorized_callback(error):
         'message': str(error)
     }), 422
 
-# Ensure database tables exist
-def init_db():
-    """Initialize the database and sequences"""
-    with app.app_context():
-        try:
-            db.create_all()
-            
-            # Initialize sequences
-            with db.engine.connect() as conn:
-                # Initialize portfolio sequence
-                result = conn.execute(text('SELECT MAX(id) FROM portfolio'))
-                max_id = result.scalar() or 0
-                conn.execute(text('ALTER TABLE portfolio ALTER COLUMN id DROP DEFAULT'))
-                conn.execute(text('DROP SEQUENCE IF EXISTS portfolio_id_seq'))
-                conn.execute(text(f'CREATE SEQUENCE portfolio_id_seq START WITH {max_id + 1}'))
-                conn.execute(text('ALTER TABLE portfolio ALTER COLUMN id SET DEFAULT nextval(\'portfolio_id_seq\')'))
-                print(f"Initialized portfolio sequence starting at {max_id + 1}")
-                
-                # Initialize transaction sequence
-                result = conn.execute(text('SELECT MAX(id) FROM transaction'))
-                max_id = result.scalar() or 0
-                conn.execute(text('ALTER TABLE transaction ALTER COLUMN id DROP DEFAULT'))
-                conn.execute(text('DROP SEQUENCE IF EXISTS transaction_id_seq'))
-                conn.execute(text(f'CREATE SEQUENCE transaction_id_seq START WITH {max_id + 1}'))
-                conn.execute(text('ALTER TABLE transaction ALTER COLUMN id SET DEFAULT nextval(\'transaction_id_seq\')'))
-                print(f"Initialized transaction sequence starting at {max_id + 1}")
-                
-        except Exception as e:
-            print(f"Error during database initialization: {str(e)}")
-            if 'relation "transaction" does not exist' in str(e):
-                # If table doesn't exist yet, create it first
-                db.create_all()
-                init_db()  # Try again after creating tables
-
-# Initialize database and sequences
-init_db()
+with app.app_context():
+    db.create_all()
 
 @app.route('/api/register', methods=['POST'])
 def register():
