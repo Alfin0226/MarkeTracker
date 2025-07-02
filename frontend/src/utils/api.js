@@ -72,6 +72,36 @@ export const executeTrade = async (tradeData) => {
   }
 };
 
+export const fetchDashboardData = async (symbol) => {
+  try {
+    const response = await api.get(`/api/dashboard/${symbol}`);
+    return response.data;
+  } catch (error) {
+    console.error('Dashboard data API error:', error.response?.data || error);
+    throw error;
+  }
+};
+
+export const fetchComparisonData = async (symbol, period) => {
+  try {
+    const response = await api.get(`/api/comparison/${symbol}?period=${period}`);
+    return response.data;
+  } catch (error) {
+    console.error('Comparison data API error:', error.response?.data || error);
+    throw error;
+  }
+};
+
+export const searchSymbols = async (query) => {
+  try {
+    const response = await api.get(`/api/search?q=${query}`);
+    return response.data;
+  } catch (error) {
+    console.error('Search API error:', error.response?.data || error);
+    throw error;
+  }
+};
+
 export const login = async (credentials) => {
   try {
     console.log('Attempting login with:', credentials.email);

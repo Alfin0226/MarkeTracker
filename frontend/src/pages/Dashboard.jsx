@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import Chart from 'chart.js/auto';
 import '../styles/Dashboard.css';
+import { fetchDashboardData as apiFetchDashboardData, fetchComparisonData as apiFetchComparisonData, searchSymbols } from '../utils/api';
 
 const Dashboard = ({ symbol: initialSymbol }) => {
   const [symbol, setSymbol] = useState(initialSymbol || 'AAPL');
@@ -14,16 +15,39 @@ const Dashboard = ({ symbol: initialSymbol }) => {
   const chartRef = React.useRef(null);
   const chartInstance = React.useRef(null);
 
+  const fetchDashboardData = useCallback(async (sym) => {
+    setError(null);
+    setDashboardData(null);
+    try {
+      const data = await apiFetchDashboardData(sym);
+      setDashboardData(data);
+    } catch (err) {
+      setError(err.message);
+    }
+  }, []);
+
+  const fetchComparisonData = useCallback(async (sym, per) => {
+    setComparisonData(null);
+    try {
+      const data = await apiFetchComparisonData(sym, per);
+      setComparisonData(data);
+    } catch (err) {
+      setComparisonData(null); // Clear data on error
+      setError('Failed to load comparison data.');
+    }
+  }, []);
+
+
   useEffect(() => {
     fetchDashboardData(symbol);
     fetchComparisonData(symbol, period);
-  }, [symbol, period]);
+  }, [symbol, period, fetchDashboardData, fetchComparisonData]);
 
   useEffect(() => {
+    if (chartInstance.current) {
+      chartInstance.current.destroy();
+    }
     if (comparisonData && chartRef.current) {
-      if (chartInstance.current) {
-        chartInstance.current.destroy();
-      }
       chartInstance.current = new Chart(chartRef.current, {
         type: 'line',
         data: {
@@ -55,42 +79,23 @@ const Dashboard = ({ symbol: initialSymbol }) => {
         },
       });
     }
+    
+    return () => {
+        if (chartInstance.current) {
+            chartInstance.current.destroy();
+        }
+    };
   }, [comparisonData, showSP500, symbol, period]);
-
-  const fetchDashboardData = async (sym) => {
-    setError(null);
-    setDashboardData(null);
-    try {
-      const res = await fetch(`/api/dashboard/${sym}`);
-      if (!res.ok) throw new Error('No data found');
-      const data = await res.json();
-      setDashboardData(data);
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  const fetchComparisonData = async (sym, per) => {
-    setComparisonData(null);
-    try {
-      const res = await fetch(`/api/comparison/${sym}?period=${per}`, {
-        headers: { Authorization: localStorage.getItem('access_token') ? `Bearer ${localStorage.getItem('access_token')}` : '' },
-      });
-      if (!res.ok) throw new Error('No comparison data');
-      const data = await res.json();
-      setComparisonData(data);
-    } catch (err) {
-      setComparisonData(null);
-    }
-  };
 
   const handleSearchChange = async (e) => {
     const val = e.target.value;
     setSearch(val);
     if (val.length > 1) {
-      const res = await fetch(`/api/search?q=${val}`);
-      if (res.ok) {
-        setSuggestions(await res.json());
+      try {
+        const data = await searchSymbols(val);
+        setSuggestions(data);
+      } catch (error) {
+        setSuggestions([]);
       }
     } else {
       setSuggestions([]);
