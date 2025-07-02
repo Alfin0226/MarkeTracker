@@ -29,7 +29,7 @@ if datahandle_url:
 
 # Configure CORS
 CORS(app, resources={
-    r"/api/*": {
+    r"/*": {
         "origins": origins,
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"],
