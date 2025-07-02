@@ -1,19 +1,12 @@
-body {
-    font-family: 'Arial', sans-serif;
-    padding:2em;
-    background-color: #f5f7fa;
-    margin: 0;
-}
-
 .dashboard-container {
     max-width: 1400px;
     margin: 0 auto;
 }
 
 h1 {
-            color: #2c3e50;
-            margin-bottom: 0.5em;
-            font-size: 2.5em;
+    color: #2c3e50;
+    margin-bottom: 0.5em;
+    font-size: 2.5em;
 }
 
 .dashboard-header {

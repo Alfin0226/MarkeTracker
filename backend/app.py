@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 import bcrypt
 from database import db
 from models import User, Portfolio, Transaction, Company
-from sqlalchemy import text, or_
+from sqlalchemy import or_, case
 import os
 from dotenv import load_dotenv
 import requests
@@ -341,13 +341,24 @@ def search_companies():
     if not query:
         return jsonify([])
 
-    # Search both symbols and names
-    search_term = f"%{query}%"
+    starts_with_term = f"{query}%"
+    contains_term = f"%{query}%"
+
+    relevance_ordering = case(
+        (Company.symbol.ilike(starts_with_term), 1),
+        (Company.name.ilike(starts_with_term), 2),
+        (Company.symbol.ilike(contains_term), 3),
+        (Company.name.ilike(contains_term), 4),
+        else_=5 
+    )
     results = Company.query.filter(
-        or_(Company.symbol.ilike(search_term), Company.name.ilike(search_term))
-    ).limit(10).all()
+        or_(
+            Company.symbol.ilike(contains_term),
+            Company.name.ilike(contains_term)
+        )
+    ).order_by(relevance_ordering, Company.name).limit(10).all()
     
-    # Format results
+    # Format results into a JSON-friendly list of dictionaries
     companies = [{'symbol': c.symbol, 'name': c.name} for c in results]
     
     return jsonify(companies)
