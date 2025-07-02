@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import Chart from 'chart.js/auto';
-import './Dashboard.css';
+import '../styles/Dashboard.css';
 
 const Dashboard = ({ symbol: initialSymbol }) => {
   const [symbol, setSymbol] = useState(initialSymbol || 'AAPL');
