@@ -14,16 +14,23 @@ load_dotenv()
 
 app = Flask(__name__)
 
+# Define allowed origins
+origins = [
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "https://marketracker.vercel.app"
+    "https://backend-theta-roan-61.vercel.app",
+]
+
+# Add DATAHANDLE_URL to origins if it exists
+datahandle_url = os.getenv('DATAHANDLE_URL')
+if datahandle_url:
+    origins.append(datahandle_url)
+
 # Configure CORS
 CORS(app, resources={
-    r"/api/*": { 
-        "origins": [
-            "http://localhost:3000",
-            "http://localhost:5173",
-            "https://marketracker.vercel.app",
-             "https://backend-theta-roan-61.vercel.app",
-            os.getenv('DATAHANDLE_URL') # Add Render URL
-        ],
+    r"/api/*": {
+        "origins": origins,
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"],
         "supports_credentials": True
@@ -79,46 +86,15 @@ if not app.config['JWT_SECRET_KEY']:
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(minutes=30)
 
 print("Initializing database...")
-try:
-    # Initialize extensions
-    db.init_app(app)
-    print("Database initialization successful")
-    
-    # Test database connection
-    with app.app_context():
-        # Try to connect and create tables
-        print("Testing database connection...")
-        db.engine.connect()
-        print("Database connection successful")
-        
-        print("Creating database tables...")
-        db.create_all()
-        print("Database tables created successfully")
-        
-        # Verify tables exist
-        print("Verifying database tables...")
-        inspector = db.inspect(db.engine)
-        tables = inspector.get_table_names()
-        print(f"Found tables: {tables}")
-        
-except Exception as e:
-    print(f"Database Error: {str(e)}")
-    print(f"Error Type: {type(e).__name__}")
-    print(f"Error Args: {getattr(e, 'args', '')}")
-    raise
-
-# Initialize JWT manager
+# Initialize extensions
+db.init_app(app)
 jwt = JWTManager(app)
 
-# Use a before_request hook to initialize the database.
-# This ensures db.create_all() is called within a proper app context
-# and only once before the first request is processed.
-@app.before_request
-def initialize_database():
-    if not getattr(g, '_database_initialized', False):
-        with app.app_context():
-            db.create_all()
-        g._database_initialized = True
+# Create database tables within the application context.
+# This is the recommended way to ensure tables are created correctly
+# without causing startup issues.
+with app.app_context():
+    db.create_all()
 
 # Add JWT error handlers
 @jwt.invalid_token_loader
