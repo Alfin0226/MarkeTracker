@@ -344,6 +344,7 @@ def search_companies():
     starts_with_term = f"{query}%"
     contains_term = f"%{query}%"
 
+    # Prioritize matches that start with the query
     relevance_ordering = case(
         (Company.symbol.ilike(starts_with_term), 1),
         (Company.name.ilike(starts_with_term), 2),
@@ -351,6 +352,7 @@ def search_companies():
         (Company.name.ilike(contains_term), 4),
         else_=5 
     )
+
     results = Company.query.filter(
         or_(
             Company.symbol.ilike(contains_term),
@@ -358,7 +360,6 @@ def search_companies():
         )
     ).order_by(relevance_ordering, Company.name).limit(10).all()
     
-    # Format results into a JSON-friendly list of dictionaries
     companies = [{'symbol': c.symbol, 'name': c.name} for c in results]
     
     return jsonify(companies)

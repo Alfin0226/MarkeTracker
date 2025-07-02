@@ -1,46 +1,110 @@
 .dashboard-container {
-    max-width: 1400px;
+    display: grid;
+    grid-template-columns: 3fr 1fr;
+    grid-template-rows: auto auto 1fr;
+    grid-template-areas:
+        "header header"
+        "main-content side-panel"
+        "main-content side-panel";
+    gap: 2em;
+    padding: 2em;
+    max-width: 1600px;
     margin: 0 auto;
 }
 
-h1 {
-    color: #2c3e50;
-    margin-bottom: 0.5em;
-    font-size: 2.5em;
+.dashboard-header {
+    grid-area: header;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1em 2em;
+    background-color: #fff;
+    border-radius: 15px;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.08);
 }
 
-.dashboard-header {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    padding: 2em;
-    border-radius: 15px;
-    margin-bottom: 2em;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+.stock-header {
+    grid-area: main-content;
+    /* This will be inside main-content area, so no grid-area needed here */
+}
+
+.main-content {
+    grid-area: main-content;
+    display: flex;
+    flex-direction: column;
+    gap: 2em;
+}
+
+.side-panel {
+    grid-area: side-panel;
+    display: flex;
+    flex-direction: column;
+    gap: 2em;
+}
+
+.search-container {
+    position: relative;
+    width: 300px;
+}
+
+.search-input {
+    width: 100%;
+    padding: 0.8em 1em;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    font-size: 1em;
+}
+
+.suggestions-list {
+    position: absolute;
+    width: 100%;
+    background: white;
+    border: 1px solid #ddd;
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    z-index: 1000;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.suggestions-list li {
+    padding: 0.8em 1em;
+    cursor: pointer;
+}
+
+.suggestions-list li:hover {
+    background-color: #f0f0f0;
 }
 
 .stock-name {
-    font-size: 2.5em;
+    font-size: 2em;
     margin: 0;
-    margin-bottom: 0.5em;
+    color: #2c3e50;
 }
 
 .price-info {
     display: flex;
-    align-items: center;
-    gap: 2em;
-    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 1em;
+    text-align: right;
 }
 
 .current-price {
-    font-size: 3em;
+    font-size: 2.5em;
     font-weight: bold;
+    color: #2c3e50;
 }
 
 .price-change {
-    font-size: 1.5em;
-    padding: 0.5em 1em;
-    border-radius: 8px;
+    font-size: 1.2em;
     font-weight: bold;
+    padding: 0.3em 0.6em;
+    border-radius: 6px;
+    display: inline-block;
+    min-width: 80px;
+    text-align: center;
 }
 
 .price-change.positive {
@@ -60,7 +124,6 @@ h1 {
     padding: 2em;
     border-radius: 15px;
     box-shadow: 0 5px 20px rgba(0,0,0,0.1);
-    margin-bottom: 2em;
 }
 
 .chart-header {
@@ -190,7 +253,6 @@ h1 {
     padding: 2em;
     border-radius: 15px;
     box-shadow: 0 5px 20px rgba(0,0,0,0.1);
-    margin-bottom: 2em;
     line-height: 1.6;
 }
 
