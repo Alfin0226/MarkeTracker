@@ -134,5 +134,9 @@ def api_dashboard(symbol):
         'income_grid_items': income_grid_items
     })
 
+@app.route('/testbackend', methods=['GET'])
+def test_backend():
+    return jsonify({'message': 'Test backend is working!'})
+
 if __name__ == '__main__':
     app.run(debug=True)
