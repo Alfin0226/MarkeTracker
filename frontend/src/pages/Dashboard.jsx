@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+  import React, { useEffect, useState, useCallback, useRef } from 'react';
 import Chart from 'chart.js/auto';
 import '../styles/Dashboard.css';
 import { fetchDashboardData as apiFetchDashboardData, fetchComparisonData as apiFetchComparisonData, searchSymbols } from '../utils/api';
@@ -12,83 +12,113 @@ const Dashboard = ({ symbol: initialSymbol }) => {
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
   const [suggestions, setSuggestions] = useState([]);
-  const chartRef = React.useRef(null);
-  const chartInstance = React.useRef(null);
+  const chartRef = useRef(null);
+  const chartInstance = useRef(null);
 
-  const fetchDashboardData = useCallback(async (sym) => {
+  const fetchAllData = useCallback(async (sym, per) => {
     setError(null);
     setDashboardData(null);
-    try {
-      const data = await apiFetchDashboardData(sym);
-      setDashboardData(data);
-    } catch (err) {
-      setError(err.message);
-    }
-  }, []);
-
-  const fetchComparisonData = useCallback(async (sym, per) => {
     setComparisonData(null);
     try {
-      const data = await apiFetchComparisonData(sym, per);
-      setComparisonData(data);
+      const [dashData, compData] = await Promise.all([
+        apiFetchDashboardData(sym),
+        apiFetchComparisonData(sym, per)
+      ]);
+      setDashboardData(dashData);
+      setComparisonData(compData);
     } catch (err) {
-      setComparisonData(null); // Clear data on error
-      setError('Failed to load comparison data.');
+      setError('Failed to load dashboard data. Please try again.');
+      console.error(err);
     }
   }, []);
 
-
   useEffect(() => {
-    fetchDashboardData(symbol);
-    fetchComparisonData(symbol, period);
-  }, [symbol, period, fetchDashboardData, fetchComparisonData]);
+    if (symbol) {
+      fetchAllData(symbol, period);
+    }
+  }, [symbol, period, fetchAllData]);
 
   useEffect(() => {
     if (chartInstance.current) {
       chartInstance.current.destroy();
     }
     if (comparisonData && chartRef.current) {
-      chartInstance.current = new Chart(chartRef.current, {
+      const ctx = chartRef.current.getContext('2d');
+      const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+      gradient.addColorStop(0, 'rgba(0, 123, 255, 0.3)');
+      gradient.addColorStop(1, 'rgba(0, 123, 255, 0.05)');
+
+      const datasets = [
+        {
+          label: `${comparisonData.stock_symbol} Performance`,
+          data: comparisonData.stock_performance,
+          borderColor: 'rgb(75, 192, 192)',
+          backgroundColor: 'transparent',
+          borderWidth: 2,
+          fill: false,
+          tension: 0.1,
+          pointRadius: 0,
+        }
+      ];
+
+      if (showSP500) {
+        datasets.push({
+          label: 'S&P 500 Performance',
+          data: comparisonData.sp500_performance,
+          borderColor: 'rgb(255, 99, 132)',
+          backgroundColor: 'transparent',
+          borderWidth: 2,
+          fill: false,
+          tension: 0.1,
+          pointRadius: 0,
+        });
+      }
+
+      chartInstance.current = new Chart(ctx, {
         type: 'line',
         data: {
           labels: comparisonData.dates,
-          datasets: [
-            {
-              label: symbol,
-              data: comparisonData.stock_performance,
-              borderColor: '#007bff',
-              fill: false,
-            },
-            showSP500 && {
-              label: 'S&P 500',
-              data: comparisonData.sp500_performance,
-              borderColor: '#28a745',
-              fill: false,
-            },
-          ].filter(Boolean),
+          datasets: datasets,
         },
         options: {
           responsive: true,
+          maintainAspectRatio: false,
           plugins: {
             legend: { display: true },
-            title: {
-              display: true,
-              text: `Performance vs S&P 500 (${period})`,
+            tooltip: {
+              mode: 'index',
+              intersect: false,
             },
           },
-        },
+          scales: {
+            x: { grid: { display: false } },
+            y: {
+              beginAtZero: false,
+              ticks: {
+                callback: function (value) {
+                  return value + '%';
+                }
+              }
+            }
+          },
+          interaction: {
+            mode: 'nearest',
+            axis: 'x',
+            intersect: false
+          }
+        }
       });
     }
-    
+
     return () => {
-        if (chartInstance.current) {
-            chartInstance.current.destroy();
-        }
+      if (chartInstance.current) {
+        chartInstance.current.destroy();
+      }
     };
-  }, [comparisonData, showSP500, symbol, period]);
+  }, [comparisonData, showSP500]);
 
   const handleSearchChange = async (e) => {
-    const val = e.target.value;
+    const val = e.target.value.toUpperCase();
     setSearch(val);
     if (val.length > 1) {
       try {
@@ -108,95 +138,112 @@ const Dashboard = ({ symbol: initialSymbol }) => {
     setSuggestions([]);
   };
 
-  return (
-    <div className="dashboard-container">
-      <div className="dashboard-header">
-        <div className="search-bar">
-          <input
-            type="text"
-            placeholder="Search company or symbol..."
-            value={search}
-            onChange={handleSearchChange}
-          />
-          {suggestions.length > 0 && (
-            <ul className="suggestions-list">
-              {suggestions.map((s) => (
-                <li key={s.symbol} onClick={() => handleSuggestionClick(s.symbol)}>
-                  {s.symbol} - {s.name}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-        <div className="period-select">
-          <label>Period: </label>
-          <select value={period} onChange={e => setPeriod(e.target.value)}>
-            <option value="1y">1 Year</option>
-            <option value="6mo">6 Months</option>
-            <option value="3mo">3 Months</option>
-            <option value="1mo">1 Month</option>
-          </select>
-        </div>
-        <div className="sp500-toggle">
-          <label>
-            <input
-              type="checkbox"
-              checked={showSP500}
-              onChange={() => setShowSP500(v => !v)}
-            />
-            Show S&P 500
-          </label>
-        </div>
+  const handlePeriodChange = (newPeriod) => {
+    setPeriod(newPeriod);
+  };
+
+  const renderPriceChange = () => {
+    if (!dashboardData || typeof dashboardData.regularMarketDayHigh === 'undefined' || typeof dashboardData.regularMarketPreviousClose === 'undefined') {
+      return null;
+    }
+    const currentPrice = dashboardData.regularMarketPrice || dashboardData.regularMarketOpen;
+    const previousClose = dashboardData.regularMarketPreviousClose;
+    const change = currentPrice - previousClose;
+    const changePercent = (change / previousClose) * 100;
+    const isPositive = change >= 0;
+
+    return (
+      <div className={`price-change ${isPositive ? 'positive' : 'negative'}`}>
+        {isPositive ? '+' : ''}{change.toFixed(2)} ({isPositive ? '+' : ''}{changePercent.toFixed(2)}%)
       </div>
+    );
+  };
+
+  return (
+    <div className="container">
       {error && <div className="error">{error}</div>}
-      {dashboardData ? (
-        <div className="dashboard-main">
-          <div className="dashboard-info">
-            <h2>{dashboardData.longname || symbol}</h2>
-            <div className="info-row">
-              <span>Sector: {dashboardData.sector}</span>
-              <span>Industry: {dashboardData.industry}</span>
-              <span>Market Cap: {dashboardData.marketCap}</span>
-            </div>
-            <div className="info-row">
-              <span>PE Ratio: {dashboardData.PE_ratio}</span>
-              <span>EPS: {dashboardData.Eps}</span>
-              <span>Dividend Yield: {dashboardData.dividend}</span>
-            </div>
-            <div className="info-row">
-              <span>Target Price: {dashboardData.target}</span>
-              <span>Analyst Rating: {dashboardData.rating}</span>
-              <span>Forecast Price: {dashboardData.forecast_price ? dashboardData.forecast_price.toFixed(2) : 'N/A'}</span>
-            </div>
-            <div className="info-row">
-              <a href={dashboardData.website} target="_blank" rel="noopener noreferrer">Company Website</a>
+      
+      {!dashboardData && !error && <div className="loading">Loading Dashboard...</div>}
+
+      {dashboardData && (
+        <>
+          <div className="stock-header">
+            <h1>{dashboardData.longname || symbol} / {symbol}</h1>
+            <div className="price-info">
+              <div className="current-price">${(dashboardData.regularMarketPrice || dashboardData.regularMarketOpen)?.toFixed(2)}</div>
+              {renderPriceChange()}
             </div>
           </div>
-          <div className="dashboard-chart">
-            <canvas ref={chartRef} />
+
+          <div className="chart-container">
+            <div className="chart-header">
+              <div className="chart-title">Performance vs. S&P 500</div>
+              <div className="chart-controls">
+                <div className="period-buttons">
+                  {['1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', 'max'].map(p => (
+                    <button 
+                      key={p} 
+                      className={`period-btn ${period === p ? 'active' : ''}`} 
+                      onClick={() => handlePeriodChange(p)}
+                    >
+                      {p.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+                <button 
+                  className={`toggle-btn ${showSP500 ? 'active' : ''}`}
+                  onClick={() => setShowSP500(!showSP500)}
+                >
+                  {showSP500 ? 'Hide S&P 500' : 'Compare S&P 500'}
+                </button>
+              </div>
+            </div>
+            <div style={{ height: '400px' }}>
+              <canvas ref={chartRef}></canvas>
+            </div>
           </div>
-          <div className="dashboard-income">
-            <h3>Quarterly Income Statement</h3>
-            <table>
-              <thead>
-                <tr>
-                  <th>Item</th>
-                  <th>Value</th>
-                </tr>
-              </thead>
-              <tbody>
-                {dashboardData.income_grid_items && dashboardData.income_grid_items.map((item, idx) => (
-                  <tr key={idx} className={item.css_class}>
-                    <td>{item.label}</td>
-                    <td>{item.value}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+
+          <div className="metrics-grid">
+            <div className="metric"><span className="label">Sector:</span><span className="value">{dashboardData.sector || 'N/A'}</span></div>
+            <div className="metric"><span className="label">Industry:</span><span className="value">{dashboardData.industry || 'N/A'}</span></div>
+            <div className="metric"><span className="label">Market Cap:</span><span className="value">{dashboardData.marketCap ? `$${(dashboardData.marketCap / 1e9).toFixed(2)}B` : 'N/A'}</span></div>
+            <div className="metric"><span className="label">Day High / Low:</span><span className="value">${dashboardData.regularMarketDayHigh?.toFixed(2) || 'N/A'} / ${dashboardData.regularMarketDayLow?.toFixed(2) || 'N/A'}</span></div>
+            <div className="metric"><span className="label">52-Week High / Low:</span><span className="value">${dashboardData.fiftyTwoWeekHigh?.toFixed(2) || 'N/A'} / ${dashboardData.fiftyTwoWeekLow?.toFixed(2) || 'N/A'}</span></div>
+            <div className="metric"><span className="label">Website:</span><span className="value"><a href={dashboardData.website} target="_blank" rel="noopener noreferrer">Visit Official Website</a></span></div>
           </div>
-        </div>
-      ) : (
-        <div className="loading">Loading dashboard...</div>
+
+          <h3 className="section-title">Valuation & Rating</h3>
+          <div className="metrics-grid">
+            <div className="metric"><span className="label">P/E Ratio (Trailing)</span><span className="value">{dashboardData.trailingPE?.toFixed(2) || 'N/A'}</span></div>
+            <div className="metric"><span className="label">EPS (Trailing)</span><span className="value">{dashboardData.trailingEps?.toFixed(2) || 'N/A'}</span></div>
+            <div className="metric"><span className="label">Dividend Yield</span><span className="value">{dashboardData.dividendYield ? `${(dashboardData.dividendYield * 100).toFixed(2)}%` : 'N/A'}</span></div>
+            <div className="metric"><span className="label">Mean Target Price</span><span className="value">${dashboardData.targetMeanPrice?.toFixed(2) || 'N/A'}</span></div>
+            <div className="metric"><span className="label">Analyst Rating</span><span className="value">{dashboardData.averageAnalystRating || 'N/A'}</span></div>
+            <div className="metric metric-forecast">
+              <span className="label">ML Price Forecast (Educational)</span>
+              <span className="value">{dashboardData.forecast_price ? `$${dashboardData.forecast_price.toFixed(2)}` : 'Not Available'}</span>
+            </div>
+          </div>
+
+          <h3 className="section-title">Business Summary</h3>
+          <div className="business-summary">
+            <p>{dashboardData.longBusinessSummary || 'No summary available.'}</p>
+          </div>
+
+          <h3 className="section-title">Quarterly Income Statement</h3>
+          <div className="income-statement-grid">
+            {dashboardData.income_grid_items && dashboardData.income_grid_items.length > 0 ? (
+              dashboardData.income_grid_items.map((item, idx) => (
+                <div key={idx} className={`income-item ${item.css_class}`}>
+                  <span className="item-label">{item.label}</span>
+                  <span className="item-value">{item.value}</span>
+                </div>
+              ))
+            ) : (
+              <p>Income statement data is not available.</p>
+            )}
+          </div>
+        </>
       )}
     </div>
   );

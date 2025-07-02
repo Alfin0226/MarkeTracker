@@ -1,159 +1,247 @@
-/* Dashboard Styles */
+body {
+    font-family: 'Arial', sans-serif;
+    background-color: #f5f7fa;
+    margin: 0;
+}
+
 .dashboard-container {
-  max-width: 1100px;
-  margin: 2rem auto;
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 2px 16px rgba(0,0,0,0.08);
-  padding: 2rem;
-  font-family: 'Segoe UI', Arial, sans-serif;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 2em;
 }
+
 .dashboard-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 1.5rem;
-  margin-bottom: 2rem;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 2em;
+    border-radius: 15px;
+    margin-bottom: 2em;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.1);
 }
-.search-bar {
-  position: relative;
-  flex: 1 1 300px;
+
+.stock-name {
+    font-size: 2.5em;
+    margin: 0;
+    margin-bottom: 0.5em;
 }
-.search-bar input {
-  width: 100%;
-  padding: 0.5rem 1rem;
-  border: 1px solid #ccc;
-  border-radius: 6px;
-  font-size: 1rem;
+
+.price-info {
+    display: flex;
+    align-items: center;
+    gap: 1em;
+    flex-wrap: wrap;
 }
-.suggestions-list {
-  position: absolute;
-  top: 110%;
-  left: 0;
-  right: 0;
-  background: #fff;
-  border: 1px solid #eee;
-  border-radius: 6px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.07);
-  z-index: 10;
-  max-height: 200px;
-  overflow-y: auto;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+
+.current-price {
+    font-size: 3em;
+    font-weight: bold;
 }
-.suggestions-list li {
-  padding: 0.5rem 1rem;
-  cursor: pointer;
-  transition: background 0.15s;
+
+.price-change {
+    font-size: 1.5em;
+    padding: 0.5em 1em;
+    border-radius: 8px;
+    font-weight: bold;
 }
-.suggestions-list li:hover {
-  background: #f0f4fa;
+
+.price-change.positive {
+    background-color: rgba(40, 167, 69, 0.2);
+    color: #28a745;
 }
-.period-select label,
-.sp500-toggle label {
-  font-weight: 500;
-  margin-right: 0.5rem;
+
+.price-change.negative {
+    background-color: rgba(220, 53, 69, 0.2);
+    color: #dc3545;
 }
-.period-select select {
-  padding: 0.3rem 0.7rem;
-  border-radius: 5px;
-  border: 1px solid #ccc;
-  font-size: 1rem;
+
+.chart-container {
+    background: white;
+    padding: 2em;
+    border-radius: 15px;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+    margin-bottom: 2em;
 }
-.sp500-toggle input[type="checkbox"] {
-  margin-right: 0.4rem;
+
+.chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5em;
+    flex-wrap: wrap;
+    gap: 1em;
 }
+
+.chart-title {
+    font-size: 1.5em;
+    font-weight: bold;
+    color: #2c3e50;
+}
+
+.chart-controls {
+    display: flex;
+    gap: 1em;
+    flex-wrap: wrap;
+}
+
+.period-buttons {
+    display: flex;
+    gap: 0.5em;
+    flex-wrap: wrap;
+}
+
+.period-btn {
+    padding: 0.5em 1em;
+    border: 2px solid #007bff;
+    background: white;
+    color: #007bff;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-weight: 500;
+}
+
+.period-btn:hover {
+    background: #007bff;
+    color: white;
+}
+
+.period-btn.active {
+    background: #007bff;
+    color: white;
+}
+
+.toggle-btn {
+    padding: 0.5em 1em;
+    border: 2px solid #6c757d;
+    background: white;
+    color: #6c757d;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.2s ease-in-out;
+}
+
+.toggle-btn.active {
+    background: #495057;
+    border-color: #495057;
+    color: white;
+}
+
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5em;
+    margin-bottom: 2em;
+}
+
+.metric {
+    padding: 1.5em;
+    background-color: #fff;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.metric .label {
+    font-weight: bold;
+    color: #555;
+    display: block;
+    margin-bottom: 0.5em;
+    font-size: 0.9em;
+    text-transform: uppercase;
+}
+
+.metric .value {
+    font-size: 1.5em;
+    color: #111;
+    font-weight: 600;
+}
+
+.metric .value a {
+    color: #007bff;
+    text-decoration: none;
+}
+
+.metric-forecast {
+    border-left: 4px solid #9b59b6;
+    background-color: #f9f6ff;
+}
+
+.metric-forecast .label {
+    color: #9b59b6;
+}
+
+.section-title {
+    font-size: 1.8em;
+    color: #2c3e50;
+    margin-bottom: 1em;
+    border-bottom: 2px solid #e0e0e0;
+    padding-bottom: 0.5em;
+}
+
+.business-summary {
+    background: white;
+    padding: 2em;
+    border-radius: 15px;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+    margin-bottom: 2em;
+    line-height: 1.6;
+}
+
+.income-statement-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1em;
+}
+
+.income-item {
+    background-color: #fff;
+    padding: 1.5em;
+    border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    border-left: 4px solid #007bff;
+}
+
+.income-item .item-label {
+    font-weight: bold;
+    color: #333;
+    font-size: 0.9em;
+    margin-bottom: 0.5em;
+    display: block;
+    text-transform: uppercase;
+}
+
+.income-item .item-value {
+    font-size: 1.3em;
+    color: #111;
+    font-weight: 600;
+}
+
+.income-item.positive {
+    border-left-color: #28a745;
+}
+
+.income-item.positive .item-value {
+    color: #28a745;
+}
+
+.income-item.negative {
+    border-left-color: #dc3545;
+}
+
+.income-item.negative .item-value {
+    color: #dc3545;
+}
+
+.loading, .error {
+    text-align: center;
+    padding: 3em;
+    font-size: 1.5em;
+    color: #555;
+}
+
 .error {
-  color: #c00;
-  background: #ffeaea;
-  padding: 0.7rem 1rem;
-  border-radius: 6px;
-  margin-bottom: 1rem;
-}
-.loading {
-  text-align: center;
-  color: #888;
-  font-size: 1.2rem;
-  margin: 2rem 0;
-}
-.dashboard-main {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2rem;
-}
-.dashboard-info {
-  flex: 1 1 350px;
-  min-width: 320px;
-  background: #f8fafc;
-  border-radius: 8px;
-  padding: 1.2rem 1.5rem;
-  margin-bottom: 1rem;
-}
-.dashboard-info h2 {
-  margin-top: 0;
-  margin-bottom: 0.7rem;
-  font-size: 1.5rem;
-}
-.info-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1.5rem;
-  margin-bottom: 0.5rem;
-  font-size: 1rem;
-}
-.dashboard-info a {
-  color: #007bff;
-  text-decoration: none;
-  font-weight: 500;
-}
-.dashboard-info a:hover {
-  text-decoration: underline;
-}
-.dashboard-chart {
-  flex: 2 1 500px;
-  min-width: 350px;
-  background: #f8fafc;
-  border-radius: 8px;
-  padding: 1.2rem 1.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.dashboard-chart canvas {
-  width: 100% !important;
-  height: 350px !important;
-}
-.dashboard-income {
-  width: 100%;
-  margin-top: 2rem;
-}
-.dashboard-income h3 {
-  margin-bottom: 1rem;
-}
-.dashboard-income table {
-  width: 100%;
-  border-collapse: collapse;
-  background: #f8fafc;
-  border-radius: 8px;
-  overflow: hidden;
-}
-.dashboard-income th, .dashboard-income td {
-  padding: 0.7rem 1rem;
-  text-align: left;
-}
-.dashboard-income th {
-  background: #e9eef6;
-  font-weight: 600;
-}
-.dashboard-income tr.positive td {
-  color: #1a7f37;
-  font-weight: 500;
-}
-.dashboard-income tr.negative td {
-  color: #c00;
-  font-weight: 500;
-}
-.dashboard-income tr:not(.positive):not(.negative):hover td {
-  background: #f0f4fa;
+    color: #dc3545;
+    background: rgba(220, 53, 69, 0.1);
+    border: 1px solid rgba(220, 53, 69, 0.2);
+    border-radius: 10px;
 }
