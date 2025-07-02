@@ -1,6 +1,6 @@
 Flask==3.1.0
 pandas==2.2.3
 scikit-learn==1.7.0
-yfinance==0.2.57
+yfinance==0.2.64
 humanize==4.12.3
 gunicorn
