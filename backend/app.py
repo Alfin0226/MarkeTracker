@@ -5,8 +5,8 @@ import yfinance as yf
 from datetime import datetime, timedelta, timezone
 import bcrypt
 from database import db
-from models import User, Portfolio, Transaction
-from sqlalchemy import text
+from models import User, Portfolio, Transaction, Company
+from sqlalchemy import text, or_
 import os
 from dotenv import load_dotenv
 import requests
@@ -16,42 +16,18 @@ app = Flask(__name__)
 
 # Configure CORS
 CORS(app, resources={
-    r"/*": {  # All routes
+    r"/api/*": { 
         "origins": [
             "http://localhost:3000",
             "http://localhost:5173",
             "https://marketracker.vercel.app",
-            "https://backend-theta-roan-61.vercel.app"
+            os.getenv('DATAHANDLE_URL') # Add Render URL
         ],
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"],
-        "expose_headers": ["Authorization"],
-        "supports_credentials": True,
-        "max_age": 600  # Cache preflight requests for 10 minutes
+        "supports_credentials": True
     }
 })
-
-@app.after_request
-def after_request(response):
-    origin = request.headers.get('Origin')
-    allowed_origins = [
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "https://marketracker.vercel.app",
-        "https://backend-theta-roan-61.vercel.app"
-    ]
-    
-    if origin in allowed_origins:
-        response.headers["Access-Control-Allow-Origin"] = origin
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
-        response.headers["Access-Control-Allow-Credentials"] = "true"
-        response.headers["Access-Control-Max-Age"] = "600"  # Cache preflight requests
-        
-        # Handle preflight requests
-        if request.method == 'OPTIONS':
-            return response
-    return response
 
 # Configuration
 print("Starting application configuration...")
@@ -357,6 +333,23 @@ def get_portfolio():
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/search', methods=['GET'])
+def search_companies():
+    query = request.args.get('q', '')
+    if not query:
+        return jsonify([])
+
+    # Search both symbols and names
+    search_term = f"%{query}%"
+    results = Company.query.filter(
+        or_(Company.symbol.ilike(search_term), Company.name.ilike(search_term))
+    ).limit(10).all()
+    
+    # Format results
+    companies = [{'symbol': c.symbol, 'name': c.name} for c in results]
+    
+    return jsonify(companies)
 
 def get_stock_price(symbol):
     """Get current stock price with multiple fallback methods"""

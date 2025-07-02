@@ -3,6 +3,12 @@ from datetime import datetime
 from sqlalchemy import Sequence, event
 from sqlalchemy.sql import text
 
+class Company(db.Model):
+    __tablename__ = 'companies'
+    id = db.Column(db.Integer, primary_key=True)
+    symbol = db.Column(db.String(20), unique=True, nullable=False)
+    name = db.Column(db.String(255), nullable=False)
+
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(120), unique=True, nullable=False)
