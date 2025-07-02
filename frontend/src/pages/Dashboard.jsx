@@ -1,4 +1,4 @@
-  import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import Chart from 'chart.js/auto';
 import '../styles/Dashboard.css';
 import { fetchDashboardData as apiFetchDashboardData, fetchComparisonData as apiFetchComparisonData, searchSymbols } from '../utils/api';
@@ -160,7 +160,7 @@ const Dashboard = ({ symbol: initialSymbol }) => {
   };
 
   return (
-    <div className="container">
+    <div className="dashboard-container">
       {error && <div className="error">{error}</div>}
       
       {!dashboardData && !error && <div className="loading">Loading Dashboard...</div>}
@@ -168,7 +168,7 @@ const Dashboard = ({ symbol: initialSymbol }) => {
       {dashboardData && (
         <>
           <div className="stock-header">
-            <h1>{dashboardData.longname || symbol} / {symbol}</h1>
+            <h1 className="stock-name">{dashboardData.longname || symbol} / {symbol}</h1>
             <div className="price-info">
               <div className="current-price">${(dashboardData.regularMarketPrice || dashboardData.regularMarketOpen)?.toFixed(2)}</div>
               {renderPriceChange()}
