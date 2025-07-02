@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify
+from flask_caching import Cache
 import pandas as pd
 from sklearn.linear_model import LinearRegression
 import yfinance as yf
@@ -6,8 +7,15 @@ import humanize
 
 app = Flask(__name__)
 
+# Configure cache
+app.config['CACHE_TYPE'] = 'SimpleCache'
+app.config['CACHE_DEFAULT_TIMEOUT'] = 300  # 5 minutes
+
+cache = Cache(app)
+
 # Helper: Price Forecast
 
+@cache.memoize(timeout=3600) # Cache for 1 hour
 def get_price_forecast(symbol):
     try:
         stock = yf.Ticker(symbol)
@@ -70,6 +78,7 @@ def create_income_grid_data(df):
 
 # Endpoint: Comparison
 @app.route('/api/comparison/<symbol>', methods=['GET'])
+@cache.memoize(timeout=300) # Cache for 5 minutes
 def get_comparison_data(symbol):
     period = request.args.get('period', '1y')
     stock_hist = yf.Ticker(symbol).history(period=period)
@@ -95,6 +104,7 @@ def get_comparison_data(symbol):
 
 # Endpoint: Dashboard
 @app.route('/api/dashboard/<symbol>', methods=['GET'])
+@cache.memoize(timeout=300) # Cache for 5 minutes
 def api_dashboard(symbol):
     try:
         if not symbol:
