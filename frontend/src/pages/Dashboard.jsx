@@ -175,7 +175,7 @@ const Dashboard = ({ symbol: initialSymbol }) => {
             <ul className="suggestions-list">
               {suggestions.map((s) => (
                 <li key={s.symbol} onClick={() => handleSuggestionClick(s.symbol)}>
-                  <strong>{s.symbol}</strong> - {s.longName}
+                  <strong>{s.symbol}</strong> - {s.name}
                 </li>
               ))}
             </ul>
