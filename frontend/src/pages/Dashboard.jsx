@@ -190,7 +190,7 @@ const Dashboard = ({ symbol: initialSymbol }) => {
         <>
           <main className="main-content">
             <div className="stock-header">
-              <h1 className="stock-name">{dashboardData.longname || symbol}</h1>
+              <h1 className="stock-name">{dashboardData.longName}({symbol})</h1>
               <div className="price-info">
                 <div className="current-price">${(dashboardData.regularMarketPrice || dashboardData.regularMarketOpen)?.toFixed(2)}</div>
                 {renderPriceChange()}
