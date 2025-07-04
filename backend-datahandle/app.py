@@ -123,7 +123,7 @@ def api_dashboard(symbol):
 
         # Add custom-calculated fields
         dashboard_data['forecast_price'] = get_price_forecast(symbol)
-        dashboard_data['market_cap_formatted'] = humanize.intword(dashboard_data.get('marketCap', 0))
+        dashboard_data['marketCap'] = humanize.intword(dashboard_data.get('marketCap', 0))
 
         q_income_stmt = stock.quarterly_income_stmt
         if not q_income_stmt.empty:
