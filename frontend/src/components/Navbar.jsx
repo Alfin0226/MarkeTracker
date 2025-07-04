@@ -20,7 +20,7 @@ function Navbar() {
           {token ? (
             <>
               <Link className="nav-link" to="/stocks">
-                Stock Tracker
+                MarkeTracker ( Home Page )
               </Link>
               <Link className="nav-link" to="/portfolio">
                 Portfolio
