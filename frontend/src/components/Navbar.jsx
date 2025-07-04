@@ -14,13 +14,13 @@ function Navbar() {
     <nav className="navbar navbar-expand-lg navbar-dark bg-dark">
       <div className="container">
         <Link className="navbar-brand" to="/">
-          Stock Tracker
+          MarkeTracker ( Home Page )
         </Link>
         <div className="navbar-nav">
           {token ? (
             <>
               <Link className="nav-link" to="/stocks">
-                MarkeTracker ( Home Page )
+                Stock Tracking
               </Link>
               <Link className="nav-link" to="/portfolio">
                 Portfolio
