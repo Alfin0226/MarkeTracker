@@ -23,7 +23,7 @@ def get_price_forecast(symbol):
         if df.empty:
             return None
         df["Target"] = df["Close"].shift(-1)
-        df = df.dropna(inplace=True)
+        df = df.dropna()  # FIX: remove inplace=True and assign result
         features = ['Open','High','Low','Close','Volume']
         X = df[features]
         y = df["Target"]
