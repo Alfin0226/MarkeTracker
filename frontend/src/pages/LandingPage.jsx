@@ -26,6 +26,7 @@ const LandingPage = () => {
       <div className="cta-container">
         <Link to="/login" className="cta-button">Login</Link>
         <Link to="/register" className="cta-button secondary">Sign Up</Link>
+        <Link to ="/dashboard" className="cta-button demo">Demo</Link>
       </div>
     </div>
   );
