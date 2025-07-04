@@ -113,8 +113,6 @@ def api_dashboard(symbol):
         stock = yf.Ticker(symbol)
         stock_info = stock.info
 
-        # Directly pass most of the info dictionary
-        # The frontend will handle formatting and fallbacks
         dashboard_data = {key: stock_info.get(key) for key in [
             'longName', 'sector', 'industry', 'website', 'marketCap',
             'trailingPE', 'trailingEps', 'dividendYield', 'targetMeanPrice',
@@ -125,7 +123,8 @@ def api_dashboard(symbol):
 
         # Add custom-calculated fields
         dashboard_data['forecast_price'] = get_price_forecast(symbol)
-        
+        dashboard_data['market_cap_formatted'] = humanize.intword(dashboard_data.get('marketCap', 0))
+
         q_income_stmt = stock.quarterly_income_stmt
         if not q_income_stmt.empty:
             q_income_stmt.columns = q_income_stmt.columns.strftime('%Y-%m-%d')

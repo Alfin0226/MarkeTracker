@@ -225,17 +225,12 @@ const Dashboard = ({ symbol: initialSymbol }) => {
               </div>
             </div>
 
-            <h3 className="section-title">Business Summary</h3>
-            <div className="business-summary">
-              <p>{dashboardData.longBusinessSummary || 'No summary available.'}</p>
-            </div>
-
             <div className="dashboard-metrics-section">
               <h3 className="section-title">Key Metrics</h3>
               <div className="metrics-grid">
                 <div className="metric"><span className="label">Sector:</span><span className="value">{dashboardData.sector || 'N/A'}</span></div>
                 <div className="metric"><span className="label">Industry:</span><span className="value">{dashboardData.industry || 'N/A'}</span></div>
-                <div className="metric"><span className="label">Market Cap:</span><span className="value">{dashboardData.marketCap ? `$${(dashboardData.marketCap / 1e9).toFixed(2)}B` : 'N/A'}</span></div>
+                <div className="metric"><span className="label">Market Cap:</span><span className="value">{dashboardData.marketCap || 'N/A'}</span></div>
                 <div className="metric"><span className="label">Day High / Low:</span><span className="value">${dashboardData.regularMarketDayHigh?.toFixed(2) || 'N/A'} / ${dashboardData.regularMarketDayLow?.toFixed(2) || 'N/A'}</span></div>
                 <div className="metric"><span className="label">52-Week High / Low:</span><span className="value">${dashboardData.fiftyTwoWeekHigh?.toFixed(2) || 'N/A'} / ${dashboardData.fiftyTwoWeekLow?.toFixed(2) || 'N/A'}</span></div>
                 <div className="metric"><span className="label">Website:</span><span className="value"><a href={dashboardData.website} target="_blank" rel="noopener noreferrer">Visit Official Website</a></span></div>
@@ -245,13 +240,18 @@ const Dashboard = ({ symbol: initialSymbol }) => {
               <div className="metrics-grid">
                 <div className="metric"><span className="label">P/E Ratio (Trailing)</span><span className="value">{dashboardData.trailingPE?.toFixed(2) || 'N/A'}</span></div>
                 <div className="metric"><span className="label">EPS (Trailing)</span><span className="value">{dashboardData.trailingEps?.toFixed(2) || 'N/A'}</span></div>
-                <div className="metric"><span className="label">Dividend Yield</span><span className="value">{dashboardData.dividendYield ? `${(dashboardData.dividendYield * 100).toFixed(2)}%` : 'N/A'}</span></div>
+                <div className="metric"><span className="label">Dividend Yield</span><span className="value">{dashboardData.dividendYield ? `${(dashboardData.dividendYield).toFixed(2)}%` : 'N/A'}</span></div>
                 <div className="metric"><span className="label">Mean Target Price</span><span className="value">${dashboardData.targetMeanPrice?.toFixed(2) || 'N/A'}</span></div>
                 <div className="metric"><span className="label">Analyst Rating</span><span className="value">{dashboardData.averageAnalystRating || 'N/A'}</span></div>
                 <div className="metric metric-forecast">
                   <span className="label">ML Price Forecast (Educational)</span>
                   <span className="value">{dashboardData.forecast_price ? `$${dashboardData.forecast_price.toFixed(2)}` : 'Not Available'}</span>
                 </div>
+              </div>
+
+            <h3 className="section-title">Business Summary</h3>
+              <div className="business-summary">
+                <p>{dashboardData.longBusinessSummary || 'No summary available.'}</p>
               </div>
 
               <h3 className="section-title">Quarterly Income Statement</h3>
