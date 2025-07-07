@@ -78,7 +78,6 @@ def create_income_grid_data(df):
 
 # Endpoint: Comparison
 @app.route('/api/comparison/<symbol>', methods=['GET'])
-@cache.memoize(timeout=300) # Cache for 5 minutes
 def get_comparison_data(symbol):
     period = request.args.get('period', '1y')
     data, error, status_code = get_comparison_data_for_period(symbol, period)
@@ -130,14 +129,14 @@ def get_comparison_data_for_period(symbol,period):
 
 def get_interval_for_period(period):
     mapping = {
-        '1d': "5m",
-        '5d': "15m",
+        '1d': "30m",
+        '5d': "1h",
         '1mo': "1d",
         '3mo': "1d",
-        '6mo': "3d",
-        '1y': "5d",
-        '2y': "1w",
-        'max': "1mo",
+        '6mo': "5d",
+        '1y': "1wk",
+        '2y': "1mo",
+        'max': "3mo",
     }
 
     return mapping.get(period)
