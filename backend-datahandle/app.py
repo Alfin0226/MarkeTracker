@@ -81,26 +81,10 @@ def create_income_grid_data(df):
 @cache.memoize(timeout=300) # Cache for 5 minutes
 def get_comparison_data(symbol):
     period = request.args.get('period', '1y')
-    stock_hist = yf.Ticker(symbol).history(period=period)
-    sp500_hist = yf.Ticker("^GSPC").history(period=period)
-    if stock_hist.empty or sp500_hist.empty:
-        return jsonify({'error': 'No data available for this period'}), 404
-    combined_df = pd.DataFrame({
-        'stock':stock_hist['Close'],
-        'sp500':sp500_hist['Close']
-    })
-    combined_df.ffill(inplace=True)
-    combined_df.dropna(inplace=True)
-    if combined_df.empty:
-        return jsonify({'error': 'No valid data available for comparison'}), 404
-    performance_df = (combined_df/ combined_df.iloc[0] - 1) * 100
-    return jsonify({
-        'dates': performance_df.index.strftime('%Y-%m-%d').tolist(),
-        'stock_performance': performance_df['stock'].round(2).tolist(),
-        'sp500_performance': performance_df['sp500'].round(2).tolist(),
-        'stock_symbol': symbol.upper(),
-        'sp500_symbol': 'S&P 500'
-    })
+    data, error, status_code = get_comparison_data_for_period(symbol, period)
+    if error:
+        return jsonify({'error': error}), status_code
+    return jsonify(data)
 
 def get_comparison_data_for_period(symbol,period):
     try:
@@ -133,7 +117,9 @@ def get_comparison_data_for_period(symbol,period):
             "price_change_percent" : round(price_change_percent, 2),
             "stock_performance": performance_df['stock'].round(2).tolist(),
             "sp500_performance": performance_df['sp500'].round(2).tolist(),
-            "end_price" : round(float(stock_hist['Close'].iloc[-1]), 2)
+            "end_price" : round(float(stock_hist['Close'].iloc[-1]), 2),
+            'stock_symbol': symbol.upper(),
+            'sp500_symbol': 'S&P 500'
         }
 
         return (data,None,200)
