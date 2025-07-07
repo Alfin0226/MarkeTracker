@@ -191,8 +191,6 @@ def api_dashboard(symbol):
     
     return jsonify(dashboard_data)
 
-@app.route('api/')
-
 @app.route('/testbackend', methods=['GET'])
 def test_backend():
     return jsonify({'message': 'Test backend is working!'})

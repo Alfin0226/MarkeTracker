@@ -206,7 +206,7 @@ const Dashboard = ({ symbol: initialSymbol }) => {
                 {/* Show the last price in the period from comparisonData if available */}
                 <div className="current-price">
                   {comparisonData && comparisonData.stock_performance && comparisonData.stock_performance.length > 0
-                    ? `$${(dashboardData.regularMarketPrice || dashboardData.regularMarketOpen)?.toFixed(2)}`
+                    ? `$${comparisonData.end_price?.toFixed(2)}`
                     : 'N/A'}
                 </div>
                 {renderPeriodPriceChange()}
