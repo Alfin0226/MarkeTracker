@@ -54,8 +54,8 @@ const Dashboard = ({ symbol: initialSymbol }) => {
             borderColor: 'rgb(75, 192, 192)',
             backgroundColor: 'transparent',
             borderWidth: 2,
-            fill: false,
-            tension: 0.1,
+            fill: true,
+            tension: 0.4,
             pointRadius: 0,
           },
           {
