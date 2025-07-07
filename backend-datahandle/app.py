@@ -133,7 +133,7 @@ def get_comparison_data_for_period(symbol,period):
             "price_change_percent" : round(price_change_percent, 2),
             "stock_performance": performance_df['stock'].round(2).tolist(),
             "sp500_performance": performance_df['sp500'].round(2).tolist(),
-            "end_price" : float(stock_hist['Close'].iloc[-1]),
+            "end_price" : round(float(stock_hist['Close'].iloc[-1]), 2)
         }
 
         return (data,None,200)

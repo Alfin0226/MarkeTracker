@@ -165,7 +165,7 @@ const Dashboard = ({ symbol: initialSymbol }) => {
     const isPositive = comparisonData.price_change >= 0;
     return (
       <div className={`price-change ${isPositive ? 'positive' : 'negative'}`}>
-        {isPositive ? '+' : ''}{comparisonData.price_change.toFixed(2)} ({isPositive ? '+' : ''}{comparisonData.price_change_percent.toFixed(2)}%)
+        {isPositive ? '+' : ''}{comparisonData.price_change} ({isPositive ? '+' : ''}{comparisonData.price_change_percent.toFixed(2)}%)
       </div>
     );
   };
@@ -206,7 +206,7 @@ const Dashboard = ({ symbol: initialSymbol }) => {
                 {/* Show the last price in the period from comparisonData if available */}
                 <div className="current-price">
                   {comparisonData && typeof comparisonData.end_price === 'number'
-                    ? `$${comparisonData.end_price.toFixed(2)}`
+                    ? `$${comparisonData.end_price}`
                     : 'N/A'}
                 </div>
                 {renderPeriodPriceChange()}
