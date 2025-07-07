@@ -140,7 +140,7 @@ def get_interval_for_period(period):
         '3mo': "90m",
         '6mo': "1d",
         '1y': "1d",
-        '2y': "1d",
+        '2y': "5d",
         'max': "3mo",
     }
 
