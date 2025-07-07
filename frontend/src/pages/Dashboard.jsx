@@ -165,7 +165,7 @@ const Dashboard = ({ symbol: initialSymbol }) => {
     const isPositive = comparisonData.price_change >= 0;
     return (
       <div className={`price-change ${isPositive ? 'positive' : 'negative'}`}>
-        {isPositive ? '+' : ''}{comparisonData.price_change} ({isPositive ? '+' : ''}{comparisonData.price_change_percent.toFixed(2)}%)
+        {isPositive ? '+' : ''}{comparisonData.price_change} ({isPositive ? '+' : ''}{comparisonData.price_change_percent}%)
       </div>
     );
   };
