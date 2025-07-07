@@ -42,55 +42,32 @@ const Dashboard = ({ symbol: initialSymbol }) => {
     if (chartInstance.current) {
       chartInstance.current.destroy();
     }
-    if (comparisonData && chartRef.current) {
+    if (comparisonData && chartRef.current && !showSP500) {
       const ctx = chartRef.current.getContext('2d');
-      let datasets;
-      let yLabel;
-      if (showSP500) {
-        datasets = [
-          {
-            label: `${comparisonData.stock_symbol} Performance (%)`,
-            data: comparisonData.stock_performance,
-            borderColor: 'rgb(75, 192, 192)',
-            backgroundColor: 'transparent',
-            borderWidth: 2,
-            fill: true,
-            tension: 0.4,
-            pointRadius: 0,
-          },
-          {
-            label: 'S&P 500 Performance (%)',
-            data: comparisonData.sp500_performance,
-            borderColor: 'rgb(255, 99, 132)',
-            backgroundColor: 'transparent',
-            borderWidth: 2,
-            fill: false,
-            tension: 0.1,
-            pointRadius: 0,
-          }
-        ];
-        yLabel = value => value + '%';
-      } else {
-        datasets = [
-          {
-            label: 'Price ($)',
-            data: comparisonData.stock_prices,
-            borderColor: 'rgb(30, 136, 229)',
-            backgroundColor: 'rgba(30, 136, 229, 0.1)',
-            borderWidth: 2,
-            fill: true,
-            tension: 0.1,
-            pointRadius: 0,
-          }
-        ];
-        yLabel = value => `$${value.toFixed(2)}`;
-      }
+
+      // Create gradient fill
+      const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+      gradient.addColorStop(0, 'rgba(0, 123, 255, 0.3)');
+      gradient.addColorStop(1, 'rgba(0, 123, 255, 0.05)');
 
       chartInstance.current = new Chart(ctx, {
         type: 'line',
         data: {
           labels: comparisonData.dates,
-          datasets: datasets,
+          datasets: [{
+            label: 'Price ($)',
+            data: comparisonData.stock_prices,
+            borderColor: '#007bff',
+            backgroundColor: gradient,
+            borderWidth: 2,
+            fill: true,
+            tension: 0.4,
+            pointRadius: 0,
+            pointHoverRadius: 6,
+            pointHoverBackgroundColor: '#007bff',
+            pointHoverBorderColor: '#ffffff',
+            pointHoverBorderWidth: 2
+          }]
         },
         options: {
           responsive: true,
@@ -100,22 +77,22 @@ const Dashboard = ({ symbol: initialSymbol }) => {
             tooltip: {
               mode: 'index',
               intersect: false,
-              callbacks: {
-                label: function(context) {
-                  if (!showSP500) {
-                    return `Price: $${context.parsed.y}`;
-                  }
-                  return `${context.dataset.label}: ${context.parsed.y}%`;
-                }
-              }
-            },
+              backgroundColor: 'rgba(0, 0, 0, 0.8)',
+              titleColor: '#ffffff',
+              bodyColor: '#ffffff',
+              borderColor: '#007bff',
+              borderWidth: 1
+            }
           },
           scales: {
-            x: { grid: { display: false } },
+            x: { grid: { display: true, color: 'rgba(0, 0, 0, 0.1)' }},
             y: {
               beginAtZero: false,
+              grid: { display: true, color: 'rgba(0, 0, 0, 0.1)' },
               ticks: {
-                callback: yLabel
+                callback: function(value) {
+                  return '$' + value.toFixed(2);
+                }
               }
             }
           },
@@ -158,23 +135,6 @@ const Dashboard = ({ symbol: initialSymbol }) => {
 
   const handlePeriodChange = (newPeriod) => {
     setPeriod(newPeriod);
-  };
-
-  const renderPriceChange = () => {
-    if (!dashboardData || typeof dashboardData.regularMarketDayHigh === 'undefined' || typeof dashboardData.regularMarketPreviousClose === 'undefined') {
-      return null;
-    }
-    const currentPrice = dashboardData.regularMarketPrice || dashboardData.regularMarketOpen;
-    const previousClose = dashboardData.regularMarketPreviousClose;
-    const change = currentPrice - previousClose;
-    const changePercent = (change / previousClose) * 100;
-    const isPositive = change >= 0;
-
-    return (
-      <div className={`price-change ${isPositive ? 'positive' : 'negative'}`}>
-        {isPositive ? '+' : ''}{change.toFixed(2)} ({isPositive ? '+' : ''}{changePercent.toFixed(2)}%)
-      </div>
-    );
   };
 
   // Show price and price change for selected period from comparisonData
