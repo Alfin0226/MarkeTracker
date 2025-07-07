@@ -112,6 +112,7 @@ def get_comparison_data_for_period(symbol,period):
 
         data = {
             "dates" : performance_df.index.strftime('%Y-%m-%d').tolist(),
+            "stock_prices" : stock_hist['Close'].round(2).tolist(),
             "price_change" : round(price_change, 2),
             "price_change_percent" : round(price_change_percent, 2),
             "stock_performance": performance_df['stock'].round(2).tolist(),

@@ -44,14 +44,12 @@ const Dashboard = ({ symbol: initialSymbol }) => {
     }
     if (comparisonData && chartRef.current) {
       const ctx = chartRef.current.getContext('2d');
-      const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-      gradient.addColorStop(0, 'rgba(0, 123, 255, 0.3)');
-      gradient.addColorStop(1, 'rgba(0, 123, 255, 0.05)');
-
       const datasets = [
         {
           label: `${comparisonData.stock_symbol} Performance`,
-          data: comparisonData.stock_performance,
+          data: showSP500
+            ? comparisonData.stock_performance
+            : comparisonData.stock_prices, // <-- use actual prices if S&P 500 is hidden
           borderColor: 'rgb(75, 192, 192)',
           backgroundColor: 'transparent',
           borderWidth: 2,
@@ -88,18 +86,35 @@ const Dashboard = ({ symbol: initialSymbol }) => {
             tooltip: {
               mode: 'index',
               intersect: false,
+              callbacks: {
+                label: function(context) {
+                  if (!showSP500) {
+                    return `Price: $${context.parsed.y}`;
+                  }
+                  return `${context.dataset.label}: ${context.parsed.y}%`;
+                }
+              }
             },
           },
           scales: {
             x: { grid: { display: false } },
-            y: {
-              beginAtZero: false,
-              ticks: {
-                callback: function (value) {
-                  return value + '%';
+            y: showSP500
+              ? {
+                  beginAtZero: false,
+                  ticks: {
+                    callback: function (value) {
+                      return value + '%';
+                    }
+                  }
+                }
+            : {
+                beginAtZero: false,
+                ticks: {
+                  callback: function (value) {
+                    return '$' + value;
+                  }
                 }
               }
-            }
           },
           interaction: {
             mode: 'nearest',
