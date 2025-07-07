@@ -109,9 +109,13 @@ def get_comparison_data_for_period(symbol,period):
         stock_end_price = float(stock_hist['Close'].iloc[-1])
         price_change = stock_end_price - stock_start_price
         price_change_percent = (price_change / stock_start_price) * 100 if stock_start_price != 0 else 0
+        if period == '1d' or period == '5d':
+            dates = performance_df.index.strftime('%m-%d %H:%M').tolist()
+        else:
+            dates = performance_df.index.strftime('%Y-%m-%d').tolist()
 
         data = {
-            "dates" : performance_df.index.strftime('%Y-%m-%d').tolist(),
+            "dates" : dates,
             "stock_prices" : stock_hist['Close'].round(2).tolist(),
             "price_change" : round(price_change, 2),
             "price_change_percent" : round(price_change_percent, 2),
