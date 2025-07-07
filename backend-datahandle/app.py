@@ -102,6 +102,59 @@ def get_comparison_data(symbol):
         'sp500_symbol': 'S&P 500'
     })
 
+def get_comparison_data_for_period(symbol,period):
+    try:
+        interval = get_interval_for_period(period)
+        if not interval:
+            return None, "Invalid period specified", 400
+        
+        stock_hist = yf.Ticker(symbol).history(period=period,interval=interval)
+        sp500_hist = yf.Ticker("^GSPC").history(period=period,interval=interval)
+        if stock_hist.empty or sp500_hist.empty:
+            return None
+        combined_df = pd.DataFrame({
+            'stock': stock_hist['Close'],
+            'sp500': sp500_hist['Close']
+        })
+        combined_df.ffill(inplace=True)
+        combined_df.dropna(inplace=True)
+        if combined_df.empty:
+            return None
+        performance_df = (combined_df / combined_df.iloc[0] - 1) * 100
+
+        stock_start_price = float(stock_hist['Close'].iloc[0])
+        stock_end_price = float(stock_hist['Close'].iloc[-1])
+        price_change = stock_end_price - stock_start_price
+        price_change_percent = (price_change / stock_start_price) * 100 if stock_start_price != 0 else 0
+
+        data = {
+            "dates" : performance_df.index.strftime('%Y-%m-%d').tolist(),
+            "price_change" : round(price_change, 2),
+            "price_change_percent" : round(price_change_percent, 2),
+            "stock_performance": performance_df['stock'].round(2).tolist(),
+            "sp500_performance": performance_df['sp500'].round(2).tolist()
+        }
+
+        return (data,None,200)
+
+    except Exception as e:
+        print(f"Error in get_comparison_data_for_period for {symbol} ({period}): {str(e)}")
+        return None, str(e), 500
+
+def get_interval_for_period(period):
+    mapping = {
+        '1d': "5m",
+        '5d': "15m",
+        '1mo': "1d",
+        '3mo': "1d",
+        '6mo': "3d",
+        '1y': "5d",
+        '2y': "1w",
+        'max': "1mo",
+    }
+
+    return mapping.get(period)
+
 # Endpoint: Dashboard
 @app.route('/api/dashboard/<symbol>', methods=['GET'])
 @cache.memoize(timeout=300) # Cache for 5 minutes
@@ -137,6 +190,8 @@ def api_dashboard(symbol):
         return jsonify({'error': str(e)}), 500
     
     return jsonify(dashboard_data)
+
+@app.route('api/')
 
 @app.route('/testbackend', methods=['GET'])
 def test_backend():

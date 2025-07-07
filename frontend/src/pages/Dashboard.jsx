@@ -159,6 +159,17 @@ const Dashboard = ({ symbol: initialSymbol }) => {
     );
   };
 
+  // Show price and price change for selected period from comparisonData
+  const renderPeriodPriceChange = () => {
+    if (!comparisonData) return null;
+    const isPositive = comparisonData.price_change >= 0;
+    return (
+      <div className={`price-change ${isPositive ? 'positive' : 'negative'}`}>
+        {isPositive ? '+' : ''}{comparisonData.price_change.toFixed(2)} ({isPositive ? '+' : ''}{comparisonData.price_change_percent.toFixed(2)}%)
+      </div>
+    );
+  };
+
   return (
     <div className="dashboard-container">
       <header className="dashboard-header">
@@ -192,8 +203,13 @@ const Dashboard = ({ symbol: initialSymbol }) => {
             <div className="stock-header">
               <h1 className="stock-name">{dashboardData.longName}({symbol})</h1>
               <div className="price-info">
-                <div className="current-price">${(dashboardData.regularMarketPrice || dashboardData.regularMarketOpen)?.toFixed(2)}</div>
-                {renderPriceChange()}
+                {/* Show the last price in the period from comparisonData if available */}
+                <div className="current-price">
+                  {comparisonData && comparisonData.stock_performance && comparisonData.stock_performance.length > 0
+                    ? `$${(dashboardData.regularMarketPrice || dashboardData.regularMarketOpen)?.toFixed(2)}`
+                    : 'N/A'}
+                </div>
+                {renderPeriodPriceChange()}
               </div>
             </div>
 
