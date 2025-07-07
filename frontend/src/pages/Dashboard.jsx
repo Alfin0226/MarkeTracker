@@ -42,19 +42,42 @@ const Dashboard = ({ symbol: initialSymbol }) => {
     if (chartInstance.current) {
       chartInstance.current.destroy();
     }
-    if (comparisonData && chartRef.current && !showSP500) {
+    if (comparisonData && chartRef.current) {
       const ctx = chartRef.current.getContext('2d');
+      let datasets, yLabel;
 
-      // Create gradient fill
-      const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-      gradient.addColorStop(0, 'rgba(0, 123, 255, 0.3)');
-      gradient.addColorStop(1, 'rgba(0, 123, 255, 0.05)');
-
-      chartInstance.current = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: comparisonData.dates,
-          datasets: [{
+      if (showSP500) {
+        // Show both stock and S&P 500 as percent change
+        datasets = [
+          {
+            label: `${comparisonData.stock_symbol} Performance (%)`,
+            data: comparisonData.stock_performance,
+            borderColor: '#007bff',
+            backgroundColor: 'transparent',
+            borderWidth: 2,
+            fill: false,
+            tension: 0.1,
+            pointRadius: 0,
+          },
+          {
+            label: 'S&P 500 Performance (%)',
+            data: comparisonData.sp500_performance,
+            borderColor: '#ff6384',
+            backgroundColor: 'transparent',
+            borderWidth: 2,
+            fill: false,
+            tension: 0.1,
+            pointRadius: 0,
+          }
+        ];
+        yLabel = value => value + '%';
+      } else {
+        // Show only stock price
+        const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+        gradient.addColorStop(0, 'rgba(0, 123, 255, 0.3)');
+        gradient.addColorStop(1, 'rgba(0, 123, 255, 0.05)');
+        datasets = [
+          {
             label: 'Price ($)',
             data: comparisonData.stock_prices,
             borderColor: '#007bff',
@@ -67,7 +90,16 @@ const Dashboard = ({ symbol: initialSymbol }) => {
             pointHoverBackgroundColor: '#007bff',
             pointHoverBorderColor: '#ffffff',
             pointHoverBorderWidth: 2
-          }]
+          }
+        ];
+        yLabel = value => '$' + value.toFixed(2);
+      }
+
+      chartInstance.current = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: comparisonData.dates,
+          datasets: datasets,
         },
         options: {
           responsive: true,
@@ -81,7 +113,15 @@ const Dashboard = ({ symbol: initialSymbol }) => {
               titleColor: '#ffffff',
               bodyColor: '#ffffff',
               borderColor: '#007bff',
-              borderWidth: 1
+              borderWidth: 1,
+              callbacks: {
+                label: function(context) {
+                  if (!showSP500) {
+                    return `Price: $${context.parsed.y}`;
+                  }
+                  return `${context.dataset.label}: ${context.parsed.y}%`;
+                }
+              }
             }
           },
           scales: {
@@ -90,9 +130,7 @@ const Dashboard = ({ symbol: initialSymbol }) => {
               beginAtZero: false,
               grid: { display: true, color: 'rgba(0, 0, 0, 0.1)' },
               ticks: {
-                callback: function(value) {
-                  return '$' + value.toFixed(2);
-                }
+                callback: yLabel
               }
             }
           },
