@@ -130,7 +130,7 @@ def get_comparison_data_for_period(symbol,period):
 
 def get_interval_for_period(period):
     mapping = {
-        '1d': "30m",
+        '1d': "5m",
         '5d': "1h",
         '1mo': "1d",
         '3mo': "1d",

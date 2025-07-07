@@ -44,32 +44,46 @@ const Dashboard = ({ symbol: initialSymbol }) => {
     }
     if (comparisonData && chartRef.current) {
       const ctx = chartRef.current.getContext('2d');
-      const datasets = [
-        {
-          label: `${comparisonData.stock_symbol} Performance`,
-          data: showSP500
-            ? comparisonData.stock_performance
-            : comparisonData.stock_prices, // <-- use actual prices if S&P 500 is hidden
-          borderColor: 'rgb(75, 192, 192)',
-          backgroundColor: 'transparent',
-          borderWidth: 2,
-          fill: false,
-          tension: 0.1,
-          pointRadius: 0,
-        }
-      ];
-
+      let datasets;
+      let yLabel;
       if (showSP500) {
-        datasets.push({
-          label: 'S&P 500 Performance',
-          data: comparisonData.sp500_performance,
-          borderColor: 'rgb(255, 99, 132)',
-          backgroundColor: 'transparent',
-          borderWidth: 2,
-          fill: false,
-          tension: 0.1,
-          pointRadius: 0,
-        });
+        datasets = [
+          {
+            label: `${comparisonData.stock_symbol} Performance (%)`,
+            data: comparisonData.stock_performance,
+            borderColor: 'rgb(75, 192, 192)',
+            backgroundColor: 'transparent',
+            borderWidth: 2,
+            fill: false,
+            tension: 0.1,
+            pointRadius: 0,
+          },
+          {
+            label: 'S&P 500 Performance (%)',
+            data: comparisonData.sp500_performance,
+            borderColor: 'rgb(255, 99, 132)',
+            backgroundColor: 'transparent',
+            borderWidth: 2,
+            fill: false,
+            tension: 0.1,
+            pointRadius: 0,
+          }
+        ];
+        yLabel = value => value + '%';
+      } else {
+        datasets = [
+          {
+            label: 'Price ($)',
+            data: comparisonData.stock_prices,
+            borderColor: 'rgb(30, 136, 229)',
+            backgroundColor: 'rgba(30, 136, 229, 0.1)',
+            borderWidth: 2,
+            fill: true,
+            tension: 0.1,
+            pointRadius: 0,
+          }
+        ];
+        yLabel = value => `$${value.toFixed(2)}`;
       }
 
       chartInstance.current = new Chart(ctx, {
@@ -98,23 +112,12 @@ const Dashboard = ({ symbol: initialSymbol }) => {
           },
           scales: {
             x: { grid: { display: false } },
-            y: showSP500
-              ? {
-                  beginAtZero: false,
-                  ticks: {
-                    callback: function (value) {
-                      return value + '%';
-                    }
-                  }
-                }
-            : {
-                beginAtZero: false,
-                ticks: {
-                  callback: function (value) {
-                    return '$' + value;
-                  }
-                }
+            y: {
+              beginAtZero: false,
+              ticks: {
+                callback: yLabel
               }
+            }
           },
           interaction: {
             mode: 'nearest',
