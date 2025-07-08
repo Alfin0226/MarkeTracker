@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { fetchStockData } from '../utils/api';
 import StockChart from '../components/StockChart';
+import { Link } from 'react-router-dom';
+import './index.css';
 
 const periodMap = {
   '1d': { period: '1d', interval: '5m' },
@@ -75,6 +77,7 @@ function StockTracker() {
           <StockChart stockData={stockData} symbol={symbol} />
         </div>
       )}
+      <Link to="/register" className="cta-button">Sign Up to use a detail dashboard of the company</Link>
     </div>
   );
 }
