@@ -19,8 +19,8 @@ function Navbar() {
         <div className="navbar-nav">
           {token ? (
             <>
-              <Link className="nav-link" to="/stocks">
-                Stock Tracking
+              <Link className="nav-link" to="/dashboard">
+                Stock Dashboard
               </Link>
               <Link className="nav-link" to="/portfolio">
                 Portfolio
