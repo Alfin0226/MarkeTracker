@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { fetchStockData } from '../utils/api';
 import StockChart from '../components/StockChart';
 import { Link } from 'react-router-dom';
-import './index.css';
 
 const periodMap = {
   '1d': { period: '1d', interval: '5m' },
