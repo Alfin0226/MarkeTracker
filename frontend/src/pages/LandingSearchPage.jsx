@@ -39,7 +39,7 @@ const LandingSearchPage = () => {
   return (
     <div className="landing-search-container">
       <div className="landing-search-card">
-        <h1>S&amp;P 500 Company Data Search</h1>
+        <h1>NASDAQ & NYSE Company Data Search</h1>
         <p>Search by name or stock symbol.</p>
         <form onSubmit={handleSubmit} style={{ position: 'relative' }}>
           <input
