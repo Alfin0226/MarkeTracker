@@ -24,10 +24,10 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route
-            path="/stocks"
+            path="/dashboard"
             element={
               <PrivateRoute>
-                <StockTracker />
+                <Dashboard />
               </PrivateRoute>
             }
           />
@@ -40,7 +40,7 @@ function App() {
             }
           />
           <Route path="/" element={<LandingPage />} />
-          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/stocks" element={<StockTracker />} />
         </Routes>
       </div>
     </Router>
