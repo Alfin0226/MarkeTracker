@@ -1,10 +1,12 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import Chart from 'chart.js/auto';
 import '../styles/Dashboard.css';
+import { useParams, useNavigate } from 'react-router-dom';
 import { fetchDashboardData as apiFetchDashboardData, fetchComparisonData as apiFetchComparisonData, searchSymbols } from '../utils/api';
 
-const Dashboard = ({ symbol: initialSymbol }) => {
-  const [symbol, setSymbol] = useState(initialSymbol || 'AAPL');
+const Dashboard = () => {
+  const { symbol } = useParams();
+  const navigate = useNavigate();
   const [dashboardData, setDashboardData] = useState(null);
   const [comparisonData, setComparisonData] = useState(null);
   const [period, setPeriod] = useState('1y');
@@ -166,7 +168,7 @@ const Dashboard = ({ symbol: initialSymbol }) => {
   };
 
   const handleSuggestionClick = (sym) => {
-    setSymbol(sym);
+    navigate(`/dashboard/${sym}`);
     setSearch('');
     setSuggestions([]);
   };
