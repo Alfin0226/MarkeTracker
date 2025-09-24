@@ -186,5 +186,9 @@ def api_dashboard(symbol):
 def test_backend():
     return jsonify({'message': 'Test backend is working!'})
 
+@app.route('/wakeupdatahandle', methods=['GET'])
+def wake_up():
+    return jsonify({'message': 'Data handle service is awake!'})
+
 if __name__ == '__main__':
     app.run(debug=True)

@@ -171,6 +171,7 @@ def login():
             return jsonify({'error': 'Server error during login'}), 500
             
         if password_matches:
+            wake_up_datahandle()
             access_token = create_access_token(identity=str(user.email))
             return jsonify({
                 'access_token': access_token,
@@ -181,6 +182,16 @@ def login():
             }), 200
     
     return jsonify({'error': 'Invalid credentials'}), 401
+
+def wake_up_datahandle():
+    try:
+        if DATAHANDLE_URL:
+            request.get(f"{DATAHANDLE_URL}/wakeup", timeout=5)
+            print("requested datahandle wakeup")
+        else:
+            print("DATAHANDLE_URL not set, skipping wakeup request")
+    except Exception as e:
+        print(f"Error waking up datahandle service: {e}")
 
 @app.route('/api/stock/<symbol>', methods=['GET'])
 def get_stock_data(symbol):
