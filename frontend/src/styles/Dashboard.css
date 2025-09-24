@@ -1,6 +1,6 @@
 .dashboard-container {
     display: grid;
-    grid-template-columns: 3fr 1fr;
+    grid-template-columns: 25fr 1fr;
     grid-template-rows: auto auto 1fr;
     grid-template-areas:
         "header header"
