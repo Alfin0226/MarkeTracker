@@ -254,7 +254,11 @@ const Dashboard = () => {
                   </button>
                 </div>
               </div>
-              <div style={{ height: '400px' }}>
+              <div style={{ 
+                height: '400px', 
+                width: '90%',  // Take 90% of the available width
+                margin: '0 auto'  // Center the chart with equal margins on both sides
+              }}>
                 <canvas ref={chartRef}></canvas>
               </div>
             </div>
