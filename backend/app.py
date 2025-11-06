@@ -186,7 +186,7 @@ def login():
 def wake_up_datahandle():
     try:
         if DATAHANDLE_URL:
-            request.get(f"{DATAHANDLE_URL}/wakeup", timeout=5)
+            requests.get(f"{DATAHANDLE_URL}/wakeup", timeout=5)
             print("requested datahandle wakeup")
         else:
             print("DATAHANDLE_URL not set, skipping wakeup request")
