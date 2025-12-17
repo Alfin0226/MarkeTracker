@@ -24,7 +24,7 @@ warnings.filterwarnings('ignore')
 STOCKS = ['QQQ', 'SPY', 'AAPL', 'NVDA', 'AMD', 'INTC', 'GOOGL', 'TSLA']
 
 # Rolling Window Training (2 years training, predict next period)
-ROLLING_WINDOW_YEARS = 2
+ROLLING_WINDOW_YEARS = 5
 TEST_DAYS = 90  # Past 2 months for testing
 TEST_START = (datetime.now() - timedelta(days=TEST_DAYS)).strftime('%Y-%m-%d')
 TEST_END = datetime.now().strftime('%Y-%m-%d')
@@ -34,7 +34,7 @@ TRAINING_END = TEST_END  # Training includes data up to today
 
 PREDICTION_DAYS = 90
 STARTING_CAPITAL = 10000  # $10,000 per stock
-MONTE_CARLO_SIMULATIONS = 10  # Reduced for speed
+MONTE_CARLO_SIMULATIONS = 50  # Reduced for speed
 EPOCHS = 100
 BATCH_SIZE = 32
 EARLY_STOPPING_PATIENCE = 20
