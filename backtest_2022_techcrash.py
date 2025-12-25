@@ -256,10 +256,26 @@ def calculate_mape(actual_prices, predicted_prices):
     return np.mean(np.abs((actual_prices.flatten() - predicted_prices.flatten()) / actual_prices.flatten())) * 100
 
 def simulate_investment(actual_prices, predicted_prices, starting_capital, 
-                       ma_200=None, ma_50=None, rvol=None, low_prices=None, high_prices=None,
-                       atr=None, rsi=None, adx=None,
+                       ma_200=None, ma_50=None, ma_20=None, rvol=None, low_prices=None, high_prices=None,
+                       atr=None, atr_avg=None, rsi=None, adx=None,
                        threshold=CONFIDENCE_THRESHOLD):
-    """Simulate investment strategy"""
+    """
+    Simulate investment strategy with Regime-Based Logic & Volatility Circuit Breaker.
+    
+    PANIC SWITCH (Volatility Circuit Breaker):
+    - If Current_ATR > 2.0 * ATR_Avg: HALT trading, force close all positions
+    
+    BULL REGIME (Price > 200 SMA):
+    - Shorts: Force cover immediately
+    - Long Entry: Buy if ML_Predicts_Up AND RVOL > 0.75
+    - Long Exit: Sell if ML_Predicts_Down, UNLESS ADX > 30 (strong trend = hold)
+    
+    BEAR REGIME (Price < 200 SMA):
+    - Longs: Force sell UNLESS Price > 20 SMA (Reversal Override)
+    - Long Entry (Reversal): Buy ONLY if Price > 20 SMA AND ML_Predicts_Up AND RVOL > 0.75
+    - Short Entry (Balanced Sniper): ML_Predicts_Down AND ADX > 15 AND 50 < RSI < 70
+    - Short Exit: Cover if ML_Predicts_Up OR RSI < 30 (take profit when oversold)
+    """
     min_len = min(len(actual_prices), len(predicted_prices))
     actual_prices = actual_prices[:min_len]
     predicted_prices = predicted_prices[:min_len]
@@ -268,6 +284,8 @@ def simulate_investment(actual_prices, predicted_prices, starting_capital,
         ma_200 = ma_200[:min_len]
     if ma_50 is not None:
         ma_50 = ma_50[:min_len]
+    if ma_20 is not None:
+        ma_20 = ma_20[:min_len]
     if rvol is not None:
         rvol = rvol[:min_len]
     if low_prices is not None:
@@ -276,6 +294,8 @@ def simulate_investment(actual_prices, predicted_prices, starting_capital,
         high_prices = high_prices[:min_len]
     if atr is not None:
         atr = atr[:min_len]
+    if atr_avg is not None:
+        atr_avg = atr_avg[:min_len]
     if rsi is not None:
         rsi = rsi[:min_len]
     if adx is not None:
@@ -305,8 +325,10 @@ def simulate_investment(actual_prices, predicted_prices, starting_capital,
         
         current_ma200 = float(ma_200[i]) if ma_200 is not None else 0
         current_ma50 = float(ma_50[i]) if ma_50 is not None else 0
+        current_ma20 = float(ma_20[i]) if ma_20 is not None else 0
         current_rvol = float(rvol[i]) if rvol is not None else 1.0
         current_atr = float(atr[i]) if atr is not None else current_price * 0.02
+        current_atr_avg = float(atr_avg[i]) if atr_avg is not None else current_atr
         current_rsi = float(rsi[i]) if rsi is not None else 50.0
         current_adx = float(adx[i]) if adx is not None else 20.0
         
@@ -316,238 +338,132 @@ def simulate_investment(actual_prices, predicted_prices, starting_capital,
             predicted_next_price = float(predicted_prices[i])
         
         pred_change_pct = (predicted_next_price - current_price) / current_price if current_price != 0 else 0
+        ml_predicts_up = pred_change_pct > threshold
+        ml_predicts_down = pred_change_pct < -threshold
         
-        # Check stop-loss
+        # STEP 0: PANIC SWITCH
+        panic_mode = (current_atr_avg > 0) and (current_atr > 2.0 * current_atr_avg)
+        
+        if panic_mode:
+            if position > 0:
+                pnl = position * (current_price - position_entry_price)
+                capital += pnl + (position * position_entry_price)
+                trade_history.append({
+                    'trade_num': len(trade_history) + 1, 'type': 'LONG', 'entry_day': entry_day, 'exit_day': i,
+                    'entry_price': position_entry_price, 'exit_price': current_price, 'shares': abs(position),
+                    'pnl': pnl, 'pnl_percent': (pnl / (abs(position) * position_entry_price)) * 100, 'exit_reason': 'PANIC_SWITCH'
+                })
+                position = 0; position_type = None; position_entry_price = 0; position_stop_price = 0
+            elif position < 0:
+                pnl = abs(position) * (position_entry_price - current_price)
+                capital += pnl + (abs(position) * position_entry_price)
+                trade_history.append({
+                    'trade_num': len(trade_history) + 1, 'type': 'SHORT', 'entry_day': entry_day, 'exit_day': i,
+                    'entry_price': position_entry_price, 'exit_price': current_price, 'shares': abs(position),
+                    'pnl': pnl, 'pnl_percent': (pnl / (abs(position) * position_entry_price)) * 100, 'exit_reason': 'PANIC_SWITCH'
+                })
+                position = 0; position_type = None; position_entry_price = 0; position_stop_price = 0
+            daily_returns.append(0.0); capital_history.append(capital); continue
+        
+        # STEP 1: ATR Stop-Loss
         stop_loss_triggered = False
-        
         if position > 0 and position_type == 'LONG':
             if current_low <= position_stop_price:
                 pnl = position * (position_stop_price - position_entry_price)
                 capital += pnl + (position * position_entry_price)
                 stop_loss_pct = ((position_stop_price - position_entry_price) / position_entry_price) * 100
-                
                 trade_history.append({
-                    'trade_num': len(trade_history) + 1,
-                    'type': 'LONG',
-                    'entry_day': entry_day,
-                    'exit_day': i,
-                    'entry_price': position_entry_price,
-                    'exit_price': position_stop_price,
-                    'shares': abs(position),
-                    'pnl': pnl,
-                    'pnl_percent': (pnl / (abs(position) * position_entry_price)) * 100,
-                    'exit_reason': f'ATR-STOP ({abs(stop_loss_pct):.1f}%)'
+                    'trade_num': len(trade_history) + 1, 'type': 'LONG', 'entry_day': entry_day, 'exit_day': i,
+                    'entry_price': position_entry_price, 'exit_price': position_stop_price, 'shares': abs(position),
+                    'pnl': pnl, 'pnl_percent': (pnl / (abs(position) * position_entry_price)) * 100, 'exit_reason': f'ATR-STOP ({abs(stop_loss_pct):.1f}%)'
                 })
-                
-                position = 0
-                position_type = None
-                position_entry_price = 0
-                position_stop_price = 0
-                stop_loss_triggered = True
-        
+                position = 0; position_type = None; position_entry_price = 0; position_stop_price = 0; stop_loss_triggered = True
         elif position < 0 and position_type == 'SHORT':
             if current_high >= position_stop_price:
                 pnl = abs(position) * (position_entry_price - position_stop_price)
                 capital += pnl + (abs(position) * position_entry_price)
                 stop_loss_pct = ((position_stop_price - position_entry_price) / position_entry_price) * 100
-                
                 trade_history.append({
-                    'trade_num': len(trade_history) + 1,
-                    'type': 'SHORT',
-                    'entry_day': entry_day,
-                    'exit_day': i,
-                    'entry_price': position_entry_price,
-                    'exit_price': position_stop_price,
-                    'shares': abs(position),
-                    'pnl': pnl,
-                    'pnl_percent': (pnl / (abs(position) * position_entry_price)) * 100,
-                    'exit_reason': f'ATR-STOP ({abs(stop_loss_pct):.1f}%)'
+                    'trade_num': len(trade_history) + 1, 'type': 'SHORT', 'entry_day': entry_day, 'exit_day': i,
+                    'entry_price': position_entry_price, 'exit_price': position_stop_price, 'shares': abs(position),
+                    'pnl': pnl, 'pnl_percent': (pnl / (abs(position) * position_entry_price)) * 100, 'exit_reason': f'ATR-STOP ({abs(stop_loss_pct):.1f}%)'
                 })
-                
-                position = 0
-                position_type = None
-                position_entry_price = 0
-                position_stop_price = 0
-                stop_loss_triggered = True
+                position = 0; position_type = None; position_entry_price = 0; position_stop_price = 0; stop_loss_triggered = True
         
         if stop_loss_triggered:
-            daily_returns.append(0.0)
-            capital_history.append(capital)
-            continue
+            daily_returns.append(0.0); capital_history.append(capital); continue
         
-        # Macro analysis
-        macro_bullish = True
-        macro_bearish = False
-        if USE_MACRO_FILTER and ma_200 is not None:
-            macro_bullish = current_price > current_ma200
-            macro_bearish = current_price < current_ma200
+        # STEP 2: Regime Detection
+        bull_regime = current_price > current_ma200 if current_ma200 > 0 else True
+        bear_regime = not bull_regime
+        reversal_override = current_price > current_ma20 if current_ma20 > 0 else False
+        volume_ok = current_rvol > RVOL_THRESHOLD
+        strong_trend = current_adx > 30
         
-        # Trading logic
-        action = None
-        exit_reason = None
-        entry_reason = None
+        # STEP 3: Trading Logic
+        action = None; exit_reason = None; entry_reason = None
         
-        if macro_bullish:
-            ml_buy_signal = pred_change_pct > threshold
-            volume_ok = current_rvol > RVOL_THRESHOLD
-            strong_trend = (current_price > current_ma200) and (current_price > current_ma50 if current_ma50 > 0 else True)
-            
-            if position == 0:
-                if ml_buy_signal and volume_ok:
-                    action = 'BUY'
-                    entry_reason = 'ML_SIGNAL'
-                elif USE_TREND_OVERRIDE and strong_trend and volume_ok:
-                    action = 'BUY'
-                    entry_reason = 'TREND_OVERRIDE'
+        if bull_regime:
+            if position < 0: action = 'COVER'; exit_reason = 'BULL_REGIME'
+            elif position == 0:
+                if ml_predicts_up and volume_ok: action = 'BUY'; entry_reason = 'ML_SIGNAL'
             elif position > 0:
-                if pred_change_pct < -threshold:
-                    action = 'SELL'
-                    exit_reason = 'SIGNAL_SELL'
-            elif position < 0:
-                action = 'COVER'
-                exit_reason = 'MACRO_FILTER'
-        
-        elif macro_bearish and STRATEGY_MODE == 'HYBRID':
-            sniper_conditions_met = (
-                current_adx > SNIPER_ADX_THRESHOLD and
-                current_rsi < SNIPER_RSI_THRESHOLD and
-                current_rvol > RVOL_THRESHOLD
-            )
-            ml_sell_signal = pred_change_pct < -threshold
-            
-            if position == 0:
-                if sniper_conditions_met and ml_sell_signal:
-                    action = 'SHORT'
-                    entry_reason = 'SNIPER_SHORT'
-            elif position < 0:
-                if pred_change_pct > threshold or current_rsi > 50:
-                    action = 'COVER'
-                    exit_reason = 'SIGNAL_COVER'
-            elif position > 0:
-                action = 'SELL'
-                exit_reason = 'MACRO_FILTER'
-        
-        elif macro_bearish and STRATEGY_MODE == 'LONG_ONLY':
+                if ml_predicts_down and not strong_trend: action = 'SELL'; exit_reason = 'SIGNAL_SELL'
+        elif bear_regime:
             if position > 0:
-                action = 'SELL'
-                exit_reason = 'MACRO_FILTER'
+                if reversal_override:
+                    if ml_predicts_down and not strong_trend: action = 'SELL'; exit_reason = 'SIGNAL_SELL'
+                else: action = 'SELL'; exit_reason = 'BEAR_REGIME'
+            elif position < 0:
+                if ml_predicts_up or current_rsi < 30: action = 'COVER'; exit_reason = 'SIGNAL_COVER' if ml_predicts_up else 'RSI_OVERSOLD'
+            elif position == 0:
+                if reversal_override and ml_predicts_up and volume_ok: action = 'BUY'; entry_reason = 'REVERSAL_LONG'
+                elif STRATEGY_MODE == 'HYBRID':
+                    if ml_predicts_down and current_adx > 15 and 50 < current_rsi < 70 and volume_ok: action = 'SHORT'; entry_reason = 'BALANCED_SNIPER'
         
-        # Execute trade
+        # STEP 4: Execute Trade
         if action == 'SELL' and position > 0:
             pnl = position * (current_price - position_entry_price)
             capital += pnl + (position * position_entry_price)
-            
-            trade_history.append({
-                'trade_num': len(trade_history) + 1,
-                'type': 'LONG',
-                'entry_day': entry_day,
-                'exit_day': i,
-                'entry_price': position_entry_price,
-                'exit_price': current_price,
-                'shares': abs(position),
-                'pnl': pnl,
-                'pnl_percent': (pnl / (abs(position) * position_entry_price)) * 100,
-                'exit_reason': exit_reason
-            })
-            
-            position = 0
-            position_type = None
-            position_entry_price = 0
-            position_stop_price = 0
-            
+            trade_history.append({'trade_num': len(trade_history) + 1, 'type': 'LONG', 'entry_day': entry_day, 'exit_day': i,
+                'entry_price': position_entry_price, 'exit_price': current_price, 'shares': abs(position),
+                'pnl': pnl, 'pnl_percent': (pnl / (abs(position) * position_entry_price)) * 100, 'exit_reason': exit_reason})
+            position = 0; position_type = None; position_entry_price = 0; position_stop_price = 0
         elif action == 'BUY' and position == 0:
-            position = capital / current_price
-            position_type = 'LONG'
-            position_entry_price = current_price
-            position_stop_price = current_price - (ATR_STOP_MULTIPLIER * current_atr)
-            entry_day = i
-            capital = 0
-            
+            position = capital / current_price; position_type = 'LONG'; position_entry_price = current_price
+            position_stop_price = current_price - (ATR_STOP_MULTIPLIER * current_atr); entry_day = i; capital = 0
         elif action == 'SHORT' and position == 0:
-            position = -(capital / current_price)
-            position_type = 'SHORT'
-            position_entry_price = current_price
-            position_stop_price = current_price + (ATR_STOP_MULTIPLIER * current_atr)
-            entry_day = i
-            capital = 0
-            
+            position = -(capital / current_price); position_type = 'SHORT'; position_entry_price = current_price
+            position_stop_price = current_price + (ATR_STOP_MULTIPLIER * current_atr); entry_day = i; capital = 0
         elif action == 'COVER' and position < 0:
             pnl = abs(position) * (position_entry_price - current_price)
             capital += pnl + (abs(position) * position_entry_price)
-            
-            trade_history.append({
-                'trade_num': len(trade_history) + 1,
-                'type': 'SHORT',
-                'entry_day': entry_day,
-                'exit_day': i,
-                'entry_price': position_entry_price,
-                'exit_price': current_price,
-                'shares': abs(position),
-                'pnl': pnl,
-                'pnl_percent': (pnl / (abs(position) * position_entry_price)) * 100,
-                'exit_reason': exit_reason
-            })
-            
-            position = 0
-            position_type = None
-            position_entry_price = 0
-            position_stop_price = 0
+            trade_history.append({'trade_num': len(trade_history) + 1, 'type': 'SHORT', 'entry_day': entry_day, 'exit_day': i,
+                'entry_price': position_entry_price, 'exit_price': current_price, 'shares': abs(position),
+                'pnl': pnl, 'pnl_percent': (pnl / (abs(position) * position_entry_price)) * 100, 'exit_reason': exit_reason})
+            position = 0; position_type = None; position_entry_price = 0; position_stop_price = 0
         
         # Calculate daily P&L
-        if position > 0:
-            price_change = next_actual_price - current_price
-            daily_pnl = position * price_change
-            current_value = position * next_actual_price
-        elif position < 0:
-            price_change = current_price - next_actual_price
-            daily_pnl = abs(position) * price_change
-            current_value = abs(position) * position_entry_price + daily_pnl
-        else:
-            daily_pnl = 0.0
-            current_value = capital
-        
-        daily_returns.append(float(daily_pnl))
-        capital_history.append(current_value if position != 0 else capital)
-        
-        if capital_history[-1] > peak_capital:
-            peak_capital = capital_history[-1]
+        if position > 0: daily_pnl = position * (next_actual_price - current_price); current_value = position * next_actual_price
+        elif position < 0: daily_pnl = abs(position) * (current_price - next_actual_price); current_value = abs(position) * position_entry_price + daily_pnl
+        else: daily_pnl = 0.0; current_value = capital
+        daily_returns.append(float(daily_pnl)); capital_history.append(current_value if position != 0 else capital)
+        if capital_history[-1] > peak_capital: peak_capital = capital_history[-1]
         drawdown = (peak_capital - capital_history[-1]) / peak_capital if peak_capital > 0 else 0
         max_drawdown = max(max_drawdown, drawdown)
     
     # Close final position
     final_price = float(actual_prices[-1])
     if position > 0:
-        pnl = position * (final_price - position_entry_price)
-        capital = position * final_price
-        
-        trade_history.append({
-            'trade_num': len(trade_history) + 1,
-            'type': 'LONG',
-            'entry_day': entry_day,
-            'exit_day': min_len - 1,
-            'entry_price': position_entry_price,
-            'exit_price': final_price,
-            'shares': abs(position),
-            'pnl': pnl,
-            'pnl_percent': (pnl / (abs(position) * position_entry_price)) * 100,
-            'exit_reason': 'END_OF_PERIOD'
-        })
+        pnl = position * (final_price - position_entry_price); capital = position * final_price
+        trade_history.append({'trade_num': len(trade_history) + 1, 'type': 'LONG', 'entry_day': entry_day, 'exit_day': min_len - 1,
+            'entry_price': position_entry_price, 'exit_price': final_price, 'shares': abs(position),
+            'pnl': pnl, 'pnl_percent': (pnl / (abs(position) * position_entry_price)) * 100, 'exit_reason': 'END_OF_PERIOD'})
     elif position < 0:
-        pnl = abs(position) * (position_entry_price - final_price)
-        capital = abs(position) * position_entry_price + pnl
-        
-        trade_history.append({
-            'trade_num': len(trade_history) + 1,
-            'type': 'SHORT',
-            'entry_day': entry_day,
-            'exit_day': min_len - 1,
-            'entry_price': position_entry_price,
-            'exit_price': final_price,
-            'shares': abs(position),
-            'pnl': pnl,
-            'pnl_percent': (pnl / (abs(position) * position_entry_price)) * 100,
-            'exit_reason': 'END_OF_PERIOD'
-        })
+        pnl = abs(position) * (position_entry_price - final_price); capital = abs(position) * position_entry_price + pnl
+        trade_history.append({'trade_num': len(trade_history) + 1, 'type': 'SHORT', 'entry_day': entry_day, 'exit_day': min_len - 1,
+            'entry_price': position_entry_price, 'exit_price': final_price, 'shares': abs(position),
+            'pnl': pnl, 'pnl_percent': (pnl / (abs(position) * position_entry_price)) * 100, 'exit_reason': 'END_OF_PERIOD'})
     
     total_pnl = capital - starting_capital
     return float(total_pnl), daily_returns, trade_history, float(max_drawdown * 100)
@@ -641,8 +557,10 @@ def backtest_stock(symbol):
         # Calculate indicators
         ma_200_full = close_series.rolling(window=200).mean()
         ma_50_full = close_series.rolling(window=50).mean()
+        ma_20_full = close_series.rolling(window=20).mean()  # NEW: 20-day SMA for reversal override
         rvol_full = calculate_rvol(volume_series, period=20)
         atr_full = calculate_atr(high_series, low_series, close_series, period=14)
+        atr_avg_full = atr_full.rolling(window=30).mean()  # NEW: 30-day ATR average for panic switch
         rsi_full = calculate_rsi(close_series, period=RSI_PERIOD)
         adx_full = calculate_adx(high_series, low_series, close_series, period=14)
         
@@ -650,21 +568,23 @@ def backtest_stock(symbol):
         test_start_idx = len(combined_data) - len(test_data)
         ma_200_test = ma_200_full.iloc[test_start_idx:test_start_idx + min_len].values
         ma_50_test = ma_50_full.iloc[test_start_idx:test_start_idx + min_len].values
+        ma_20_test = ma_20_full.iloc[test_start_idx:test_start_idx + min_len].values  # NEW
         rvol_test = rvol_full.iloc[test_start_idx:test_start_idx + min_len].values
         atr_test = atr_full.iloc[test_start_idx:test_start_idx + min_len].values
+        atr_avg_test = atr_avg_full.iloc[test_start_idx:test_start_idx + min_len].values  # NEW
         rsi_test = rsi_full.iloc[test_start_idx:test_start_idx + min_len].values
         adx_test = adx_full.iloc[test_start_idx:test_start_idx + min_len].values
         low_test = low_series.iloc[test_start_idx:test_start_idx + min_len].values
         high_test = high_series.iloc[test_start_idx:test_start_idx + min_len].values
         
-        # Simulate investment
-        strategy_desc = "LONG-ONLY" if STRATEGY_MODE == 'LONG_ONLY' else "HYBRID (Sniper Shorts)"
+        # Simulate investment (Regime-Based with Panic Switch)
+        strategy_desc = "LONG-ONLY" if STRATEGY_MODE == 'LONG_ONLY' else "HYBRID (Balanced Sniper)"
         print(f"  Simulating {strategy_desc} strategy...")
         total_pnl, daily_returns, trade_history, max_drawdown = simulate_investment(
             actual_prices, predicted_prices, STARTING_CAPITAL,
-            ma_200=ma_200_test, ma_50=ma_50_test, rvol=rvol_test, 
+            ma_200=ma_200_test, ma_50=ma_50_test, ma_20=ma_20_test, rvol=rvol_test, 
             low_prices=low_test, high_prices=high_test, 
-            atr=atr_test, rsi=rsi_test, adx=adx_test,
+            atr=atr_test, atr_avg=atr_avg_test, rsi=rsi_test, adx=adx_test,
             threshold=CONFIDENCE_THRESHOLD
         )
         pnl_percent = (total_pnl / STARTING_CAPITAL) * 100

@@ -1,17 +1,14 @@
 """
-Monte Carlo Stock Analysis with LSTM Model
-Analyzes: QQQ, SPY, AAPL, NVDA, AMD, INTC, GOOGL, TSLA
-Features: Volume-weighted indicators, Macro regime filter, Stop-loss protection
-Generates: Directional Accuracy, MSE, Investment Simulation with Exit Reasons
+Backtest: 2022 "Tech Wreck" - Bearish Market Analysis
+Uses EXISTING trained models to test performance during the 2022 bear market.
+This tests how the model would have performed during a major downturn.
 """
 
 import numpy as np
 import pandas as pd
 import yfinance as yf
 from sklearn.preprocessing import MinMaxScaler
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense, Dropout
-from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.models import load_model
 from datetime import datetime, timedelta
 import os
 import pickle
@@ -19,96 +16,51 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # ==========================================
-# CONFIGURATION
+# BACKTEST CONFIGURATION - 2022 TECH WRECK
 # ==========================================
 STOCKS = ['QQQ', 'SPY', 'AAPL', 'NVDA', 'AMD', 'INTC', 'GOOGL', 'TSLA']
 
-# Rolling Window Training (5 years training, predict next period)
-ROLLING_WINDOW_YEARS = 5
-TEST_DAYS = 90  # Past 3 months for testing
-TEST_START = (datetime.now() - timedelta(days=TEST_DAYS)).strftime('%Y-%m-%d')
-TEST_END = datetime.now().strftime('%Y-%m-%d')
-# Training window: 5 years ending today (rolling window with most recent data)
-TRAINING_START = (datetime.now() - timedelta(days=ROLLING_WINDOW_YEARS * 365)).strftime('%Y-%m-%d')
-TRAINING_END = TEST_END  # Training includes data up to today
+# Test Period: 2022 Tech Wreck (Bearish Market)
+TEST_START = '2020-02-15'
+TEST_END = '2020-04-15'
+TEST_NAME = "2020 Covid Crash"
+
+# Training data needed for technical indicators calculation continuity
+# We need data from before the test period to calculate indicators properly
+LOOKBACK_START = '2019-01-01'  # ~1 year before test for indicator calculation
 
 PREDICTION_DAYS = 90
 STARTING_CAPITAL = 10000  # $10,000 per stock
-MONTE_CARLO_SIMULATIONS = 50  # Reduced for speed
-EPOCHS = 100
-BATCH_SIZE = 32
-EARLY_STOPPING_PATIENCE = 20
 
-# Strategy Parameters
+# Strategy Parameters (same as main analysis)
 CONFIDENCE_THRESHOLD = 0.005  # 0.5% threshold for trading
 ATR_STOP_MULTIPLIER = 2.0  # Dynamic stop-loss: Entry - (2 * ATR)
-RVOL_THRESHOLD = 0.75  # Relaxed: volume must be > 0.75 (avoid dead volume only)
+RVOL_THRESHOLD = 0.75  # Volume must be > 0.75
 USE_MACRO_FILTER = True  # Use 200-day SMA as macro regime filter
-USE_TREND_OVERRIDE = True  # Force entry when trend is strong (Price > 200 SMA AND > 50 SMA)
+USE_TREND_OVERRIDE = True  # Force entry when trend is strong
 
 # Strategy Mode: 'LONG_ONLY' or 'HYBRID' (allows sniper shorts)
 STRATEGY_MODE = 'HYBRID'  # Sniper shorting enabled
 
-# Sniper Short Parameters (only used in HYBRID mode)
-# Short only when: Price < 200 SMA AND ADX > 25 AND RSI < 50
-SNIPER_ADX_THRESHOLD = 25  # Trend strength threshold for shorts
-SNIPER_RSI_THRESHOLD = 50  # RSI must be below this to short
+# Sniper Short Parameters
+SNIPER_ADX_THRESHOLD = 25
+SNIPER_RSI_THRESHOLD = 50
 
-# Hyperparameters (Tuned for less noise)
-RSI_PERIOD = 21  # Increased from 14
-MFI_PERIOD = 21  # Money Flow Index period
-MACD_FAST = 24   # Increased from 12
-MACD_SLOW = 52   # Increased from 26
-MACD_SIGNAL = 18 # Increased from 9
+# Technical Indicator Parameters
+RSI_PERIOD = 21
+MFI_PERIOD = 21
+MACD_FAST = 24
+MACD_SLOW = 52
+MACD_SIGNAL = 18
 
-USE_TECHNICAL_INDICATORS = True
-SAVE_MODELS = True
 MODEL_DIR = 'saved_models'
-LOAD_EXISTING_MODELS = True  # Try to load existing models
-AUTO_UPDATE_MODELS = True  # Retrain if model is outdated (training_end != current TRAINING_END)
 
 # ==========================================
-# HELPER FUNCTIONS
+# HELPER FUNCTIONS (copied from main analysis)
 # ==========================================
-
-def load_saved_model(symbol, expected_training_end=None):
-    """Load a previously saved model and model info for a symbol.
-    
-    Args:
-        symbol: Stock ticker symbol
-        expected_training_end: Expected training end date (YYYY-MM-DD string).
-                              If provided, checks if model is up-to-date.
-    
-    Returns:
-        (model, model_info, is_up_to_date) tuple.
-        is_up_to_date is True if model's training_end matches expected_training_end.
-    """
-    from tensorflow.keras.models import load_model
-    
-    model_path = os.path.join(MODEL_DIR, f"{symbol}_lstm_model.keras")
-    model_info_path = os.path.join(MODEL_DIR, f"{symbol}_model_info.pkl")
-    
-    if os.path.exists(model_path) and os.path.exists(model_info_path):
-        model = load_model(model_path)
-        with open(model_info_path, 'rb') as f:
-            model_info = pickle.load(f)
-        
-        # Check if model is up-to-date (saved date must be >= expected date)
-        is_up_to_date = True
-        if expected_training_end:
-            saved_training_end = model_info.get('training_end_date')
-            if saved_training_end:
-                # Compare dates chronologically - model is up-to-date if trained through same or later date
-                is_up_to_date = (saved_training_end >= expected_training_end)
-            else:
-                # Old model without date info - consider outdated
-                is_up_to_date = False
-        
-        return model, model_info, is_up_to_date
-    return None, None, False
 
 def calculate_rsi(prices, period=RSI_PERIOD):
-    """Calculate Relative Strength Index with configurable period"""
+    """Calculate Relative Strength Index"""
     delta = prices.diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
@@ -117,7 +69,7 @@ def calculate_rsi(prices, period=RSI_PERIOD):
     return rsi
 
 def calculate_macd(prices, fast=MACD_FAST, slow=MACD_SLOW, signal=MACD_SIGNAL):
-    """Calculate MACD with tuned parameters for less noise"""
+    """Calculate MACD"""
     ema_fast = prices.ewm(span=fast, adjust=False).mean()
     ema_slow = prices.ewm(span=slow, adjust=False).mean()
     macd = ema_fast - ema_slow
@@ -126,10 +78,9 @@ def calculate_macd(prices, fast=MACD_FAST, slow=MACD_SLOW, signal=MACD_SIGNAL):
     return macd, macd_signal, macd_histogram
 
 def calculate_obv(close, volume):
-    """Calculate On-Balance Volume to detect price/volume divergence"""
+    """Calculate On-Balance Volume"""
     obv = np.zeros(len(close))
     obv[0] = volume.iloc[0]
-    
     for i in range(1, len(close)):
         if close.iloc[i] > close.iloc[i-1]:
             obv[i] = obv[i-1] + volume.iloc[i]
@@ -137,44 +88,35 @@ def calculate_obv(close, volume):
             obv[i] = obv[i-1] - volume.iloc[i]
         else:
             obv[i] = obv[i-1]
-    
     return pd.Series(obv, index=close.index)
 
 def calculate_mfi(high, low, close, volume, period=MFI_PERIOD):
-    """Calculate Money Flow Index (volume-weighted RSI)"""
+    """Calculate Money Flow Index"""
     typical_price = (high + low + close) / 3
     raw_money_flow = typical_price * volume
-    
-    # Calculate positive and negative money flow
     delta = typical_price.diff()
     positive_flow = raw_money_flow.where(delta > 0, 0)
     negative_flow = raw_money_flow.where(delta < 0, 0)
-    
-    # Sum over period
     positive_sum = positive_flow.rolling(window=period).sum()
     negative_sum = negative_flow.rolling(window=period).sum()
-    
-    # Money Flow Ratio and MFI
     mfr = positive_sum / negative_sum
     mfi = 100 - (100 / (1 + mfr))
-    
     return mfi
 
 def calculate_vwap(high, low, close, volume):
-    """Calculate Volume Weighted Average Price (rolling daily reset)"""
+    """Calculate Volume Weighted Average Price"""
     typical_price = (high + low + close) / 3
     vwap = (typical_price * volume).cumsum() / volume.cumsum()
     return vwap
 
 def calculate_rvol(volume, period=20):
-    """Calculate Relative Volume (current vs 20-day average)"""
+    """Calculate Relative Volume"""
     avg_volume = volume.rolling(window=period).mean()
     rvol = volume / avg_volume
     return rvol
 
 def calculate_atr(high, low, close, period=14):
-    """Calculate Average True Range for dynamic stop-loss"""
-    # True Range = max(High-Low, |High-PrevClose|, |Low-PrevClose|)
+    """Calculate Average True Range"""
     prev_close = close.shift(1)
     tr1 = high - low
     tr2 = (high - prev_close).abs()
@@ -184,41 +126,30 @@ def calculate_atr(high, low, close, period=14):
     return atr
 
 def calculate_adx(high, low, close, period=14):
-    """
-    Calculate Average Directional Index (ADX) for trend strength.
-    ADX > 25 indicates a strong trend (up or down).
-    ADX < 20 indicates a weak/ranging market.
-    """
-    # True Range
+    """Calculate Average Directional Index"""
     prev_close = close.shift(1)
     tr1 = high - low
     tr2 = (high - prev_close).abs()
     tr3 = (low - prev_close).abs()
     true_range = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
     
-    # Directional Movement
     plus_dm = high.diff()
     minus_dm = -low.diff()
-    
     plus_dm[plus_dm < 0] = 0
     minus_dm[minus_dm < 0] = 0
     
-    # When +DM > -DM, use +DM; else 0
     plus_dm = np.where((plus_dm > minus_dm) & (plus_dm > 0), plus_dm, 0)
     minus_dm = np.where((minus_dm > plus_dm) & (minus_dm > 0), minus_dm, 0)
     
     plus_dm = pd.Series(plus_dm, index=high.index)
     minus_dm = pd.Series(minus_dm, index=high.index)
     
-    # Smoothed values (Wilder's smoothing = EMA with alpha=1/period)
     atr = true_range.ewm(alpha=1/period, min_periods=period).mean()
     plus_di = 100 * (plus_dm.ewm(alpha=1/period, min_periods=period).mean() / atr)
     minus_di = 100 * (minus_dm.ewm(alpha=1/period, min_periods=period).mean() / atr)
     
-    # ADX = smoothed(|+DI - -DI| / (+DI + -DI))
     dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di)
     adx = dx.ewm(alpha=1/period, min_periods=period).mean()
-    
     return adx
 
 def flatten_columns(df):
@@ -228,11 +159,9 @@ def flatten_columns(df):
     return df
 
 def add_technical_indicators(df):
-    """Add technical indicators including volume-weighted metrics"""
-    # Flatten MultiIndex columns if present (yfinance issue)
+    """Add technical indicators"""
     df = flatten_columns(df)
     
-    # Ensure columns are Series, not DataFrame
     close = df['Close']
     high = df['High']
     low = df['Low']
@@ -247,131 +176,57 @@ def add_technical_indicators(df):
     if isinstance(volume, pd.DataFrame):
         volume = volume.iloc[:, 0]
     
-    # Moving Averages
     df['MA_10'] = close.rolling(window=10).mean()
     df['MA_20'] = close.rolling(window=20).mean()
     df['MA_50'] = close.rolling(window=50).mean()
-    df['MA_200'] = close.rolling(window=200).mean()  # Macro regime filter
-    
-    # RSI with tuned period
+    df['MA_200'] = close.rolling(window=200).mean()
     df['RSI'] = calculate_rsi(close, period=RSI_PERIOD)
     
-    # MACD with tuned parameters
     macd, macd_signal, macd_hist = calculate_macd(close)
     df['MACD'] = macd.values if hasattr(macd, 'values') else macd
     df['MACD_Signal'] = macd_signal.values if hasattr(macd_signal, 'values') else macd_signal
     df['MACD_Hist'] = macd_hist.values if hasattr(macd_hist, 'values') else macd_hist
     
-    # Bollinger Bands
     bb_middle = close.rolling(window=20).mean()
     bb_std = close.rolling(window=20).std()
     df['BB_Middle'] = bb_middle.values if hasattr(bb_middle, 'values') else bb_middle
     df['BB_Upper'] = (bb_middle + (bb_std * 2)).values
     df['BB_Lower'] = (bb_middle - (bb_std * 2)).values
     
-    # Price momentum
     df['Momentum'] = close.pct_change(periods=10).values
-    
-    # Volatility
     df['Volatility'] = close.rolling(window=20).std().values
-    
-    # NEW: Volume-Weighted Indicators
-    df['OBV'] = calculate_obv(close, volume).values  # On-Balance Volume
-    df['MFI'] = calculate_mfi(high, low, close, volume, period=MFI_PERIOD).values  # Money Flow Index
-    df['VWAP'] = calculate_vwap(high, low, close, volume).values  # VWAP
-    df['RVOL'] = calculate_rvol(volume, period=20).values  # Relative Volume
-    df['ATR'] = calculate_atr(high, low, close, period=14).values  # Average True Range
-    df['ADX'] = calculate_adx(high, low, close, period=14).values  # Average Directional Index (trend strength)
-    
-    # ATR Average (30-day) for Panic Switch volatility circuit breaker
-    df['ATR_Avg'] = df['ATR'].rolling(window=30).mean()
-    
-    # Normalize OBV for scaling (use percent change)
+    df['OBV'] = calculate_obv(close, volume).values
+    df['MFI'] = calculate_mfi(high, low, close, volume, period=MFI_PERIOD).values
+    df['VWAP'] = calculate_vwap(high, low, close, volume).values
+    df['RVOL'] = calculate_rvol(volume, period=20).values
+    df['ATR'] = calculate_atr(high, low, close, period=14).values
+    df['ADX'] = calculate_adx(high, low, close, period=14).values
     df['OBV_Norm'] = df['OBV'].pct_change().rolling(window=5).mean() * 100
-    
-    # Above/Below 200-day SMA (binary for regime)
     df['Above_MA200'] = (close > df['MA_200']).astype(float)
     
-    # Drop NaN rows
     df = df.dropna()
-    
     return df
 
-def build_lstm_model(input_shape):
-    """Build LSTM model with improved architecture"""
-    model = Sequential()
-    model.add(LSTM(units=100, return_sequences=True, input_shape=input_shape))
-    model.add(Dropout(0.2))
-    model.add(LSTM(units=100, return_sequences=True))
-    model.add(Dropout(0.2))
-    model.add(LSTM(units=50))
-    model.add(Dropout(0.2))
-    model.add(Dense(units=25, activation='relu'))
-    model.add(Dense(units=1))
-    model.compile(optimizer='adam', loss='mean_squared_error')
-    return model
+def load_saved_model(symbol):
+    """Load a previously saved model and model info"""
+    model_path = os.path.join(MODEL_DIR, f"{symbol}_lstm_model.keras")
+    model_info_path = os.path.join(MODEL_DIR, f"{symbol}_model_info.pkl")
+    
+    if os.path.exists(model_path) and os.path.exists(model_info_path):
+        model = load_model(model_path)
+        with open(model_info_path, 'rb') as f:
+            model_info = pickle.load(f)
+        return model, model_info
+    return None, None
 
-def get_early_stopping():
-    """Create early stopping callback"""
-    return EarlyStopping(
-        monitor='loss',
-        patience=EARLY_STOPPING_PATIENCE,
-        restore_best_weights=True,
-        verbose=1
-    )
-
-def prepare_training_data_with_features(df, prediction_days):
-    """Prepare training sequences with technical indicators"""
-    # Add technical indicators
-    df = add_technical_indicators(df.copy())
-    
-    # Updated feature columns with volume-weighted indicators
-    feature_columns = ['Close', 'MA_10', 'MA_20', 'MA_50', 'RSI', 'MACD', 'MACD_Signal', 
-                       'MACD_Hist', 'BB_Upper', 'BB_Lower', 'Momentum', 'Volatility',
-                       'OBV_Norm', 'MFI', 'RVOL', 'Above_MA200']
-    
-    data = df[feature_columns].values
-    
-    # Scale all features
-    scaler = MinMaxScaler(feature_range=(0, 1))
-    scaled_data = scaler.fit_transform(data)
-    
-    # Create price-only scaler for inverse transform later
-    price_scaler = MinMaxScaler(feature_range=(0, 1))
-    price_scaler.fit_transform(df[['Close']].values)
-    
-    x_train, y_train = [], []
-    for i in range(prediction_days, len(scaled_data)):
-        x_train.append(scaled_data[i-prediction_days:i])  # All features
-        y_train.append(scaled_data[i, 0])  # Only Close price as target
-    
-    x_train, y_train = np.array(x_train), np.array(y_train)
-    
-    return x_train, y_train, scaler, price_scaler, len(feature_columns), feature_columns
-
-def prepare_training_data(data, prediction_days):
-    """Prepare training sequences from price data (single feature)"""
-    scaler = MinMaxScaler(feature_range=(0, 1))
-    scaled_data = scaler.fit_transform(data)
-    
-    x_train, y_train = [], []
-    for i in range(prediction_days, len(scaled_data)):
-        x_train.append(scaled_data[i-prediction_days:i, 0])
-        y_train.append(scaled_data[i, 0])
-    
-    x_train, y_train = np.array(x_train), np.array(y_train)
-    x_train = np.reshape(x_train, (x_train.shape[0], x_train.shape[1], 1))
-    
-    return x_train, y_train, scaler
-
-def prepare_test_data_with_features(train_df, test_df, scaler, prediction_days, feature_columns):
+def prepare_test_data_with_features(lookback_df, test_df, scaler, prediction_days, feature_columns):
     """Prepare test sequences with technical indicators"""
-    # Combine train and test for indicator calculation continuity
-    combined_df = pd.concat([train_df, test_df], axis=0)
+    combined_df = pd.concat([lookback_df, test_df], axis=0)
     combined_df = add_technical_indicators(combined_df.copy())
     
-    # Get only the test portion plus lookback
     start_idx = len(combined_df) - len(test_df) - prediction_days
+    if start_idx < 0:
+        start_idx = 0
     model_inputs_df = combined_df.iloc[start_idx:]
     
     data = model_inputs_df[feature_columns].values
@@ -384,22 +239,6 @@ def prepare_test_data_with_features(train_df, test_df, scaler, prediction_days, 
     x_test = np.array(x_test)
     return x_test
 
-def prepare_test_data(train_data, test_data, scaler, prediction_days):
-    """Prepare test sequences (single feature)"""
-    total_dataset = pd.concat((train_data, test_data), axis=0)
-    model_inputs = total_dataset[len(total_dataset) - len(test_data) - prediction_days:].values
-    model_inputs = model_inputs.reshape(-1, 1)
-    model_inputs = scaler.transform(model_inputs)
-    
-    x_test = []
-    for i in range(prediction_days, len(model_inputs)):
-        x_test.append(model_inputs[i-prediction_days:i, 0])
-    
-    x_test = np.array(x_test)
-    x_test = np.reshape(x_test, (x_test.shape[0], x_test.shape[1], 1))
-    
-    return x_test
-
 def calculate_directional_accuracy(actual_prices, predicted_prices):
     """Calculate percentage of correct direction predictions"""
     actual_direction = np.diff(actual_prices.flatten()) > 0
@@ -408,15 +247,12 @@ def calculate_directional_accuracy(actual_prices, predicted_prices):
     return (correct / len(actual_direction)) * 100
 
 def calculate_mse(actual_prices, predicted_prices):
-    """Calculate Mean Squared Error"""
     return np.mean((actual_prices.flatten() - predicted_prices.flatten()) ** 2)
 
 def calculate_rmse(actual_prices, predicted_prices):
-    """Calculate Root Mean Squared Error"""
     return np.sqrt(calculate_mse(actual_prices, predicted_prices))
 
 def calculate_mape(actual_prices, predicted_prices):
-    """Calculate Mean Absolute Percentage Error"""
     return np.mean(np.abs((actual_prices.flatten() - predicted_prices.flatten()) / actual_prices.flatten())) * 100
 
 def simulate_investment(actual_prices, predicted_prices, starting_capital, 
@@ -439,10 +275,7 @@ def simulate_investment(actual_prices, predicted_prices, starting_capital,
     - Long Entry (Reversal): Buy ONLY if Price > 20 SMA AND ML_Predicts_Up AND RVOL > 0.75
     - Short Entry (Balanced Sniper): ML_Predicts_Down AND ADX > 15 AND 50 < RSI < 70
     - Short Exit: Cover if ML_Predicts_Up OR RSI < 30 (take profit when oversold)
-    
-    Returns total PnL, daily returns, detailed trade history, and max drawdown
     """
-    # Ensure arrays are same length
     min_len = min(len(actual_prices), len(predicted_prices))
     actual_prices = actual_prices[:min_len]
     predicted_prices = predicted_prices[:min_len]
@@ -451,6 +284,8 @@ def simulate_investment(actual_prices, predicted_prices, starting_capital,
         ma_200 = ma_200[:min_len]
     if ma_50 is not None:
         ma_50 = ma_50[:min_len]
+    if ma_20 is not None:
+        ma_20 = ma_20[:min_len]
     if rvol is not None:
         rvol = rvol[:min_len]
     if low_prices is not None:
@@ -465,22 +300,19 @@ def simulate_investment(actual_prices, predicted_prices, starting_capital,
         rsi = rsi[:min_len]
     if adx is not None:
         adx = adx[:min_len]
-    if ma_20 is not None:
-        ma_20 = ma_20[:min_len]
     
     if min_len < 2:
         return 0.0, [], [], 0.0
     
     capital = starting_capital
-    position = 0  # Number of shares (0 = CASH, >0 = LONG, <0 = SHORT)
-    position_type = None  # 'LONG' or 'SHORT'
+    position = 0
+    position_type = None
     position_entry_price = 0
-    position_stop_price = 0  # Dynamic stop based on ATR at entry
+    position_stop_price = 0
     entry_day = 0
     daily_returns = []
     trade_history = []
     
-    # Track for max drawdown calculation
     peak_capital = starting_capital
     max_drawdown = 0.0
     capital_history = [starting_capital]
@@ -491,7 +323,6 @@ def simulate_investment(actual_prices, predicted_prices, starting_capital,
         current_low = float(low_prices[i]) if low_prices is not None else current_price
         current_high = float(high_prices[i]) if high_prices is not None else current_price
         
-        # Get current indicators
         current_ma200 = float(ma_200[i]) if ma_200 is not None else 0
         current_ma50 = float(ma_50[i]) if ma_50 is not None else 0
         current_ma20 = float(ma_20[i]) if ma_20 is not None else 0
@@ -501,13 +332,11 @@ def simulate_investment(actual_prices, predicted_prices, starting_capital,
         current_rsi = float(rsi[i]) if rsi is not None else 50.0
         current_adx = float(adx[i]) if adx is not None else 20.0
         
-        # Get prediction for next day
         if i < min_len - 1:
             predicted_next_price = float(predicted_prices[i + 1])
         else:
             predicted_next_price = float(predicted_prices[i])
         
-        # Calculate predicted percent change
         pred_change_pct = (predicted_next_price - current_price) / current_price if current_price != 0 else 0
         ml_predicts_up = pred_change_pct > threshold
         ml_predicts_down = pred_change_pct < -threshold
@@ -515,11 +344,9 @@ def simulate_investment(actual_prices, predicted_prices, starting_capital,
         # ==========================================
         # STEP 0: PANIC SWITCH - Volatility Circuit Breaker
         # ==========================================
-        # If ATR > 2.0 * ATR_Avg, halt all trading and force close positions
         panic_mode = (current_atr_avg > 0) and (current_atr > 2.0 * current_atr_avg)
         
         if panic_mode:
-            # Force close any open position immediately
             if position > 0:
                 pnl = position * (current_price - position_entry_price)
                 capital += pnl + (position * position_entry_price)
@@ -559,17 +386,15 @@ def simulate_investment(actual_prices, predicted_prices, starting_capital,
                 position_entry_price = 0
                 position_stop_price = 0
             
-            # Record $0 daily return and skip to next day
             daily_returns.append(0.0)
             capital_history.append(capital)
             continue
         
         # ==========================================
-        # STEP 1: Check Dynamic ATR Stop-Loss (if in position)
+        # STEP 1: Check Dynamic ATR Stop-Loss
         # ==========================================
         stop_loss_triggered = False
         
-        # LONG stop-loss
         if position > 0 and position_type == 'LONG':
             if current_low <= position_stop_price:
                 pnl = position * (position_stop_price - position_entry_price)
@@ -595,10 +420,8 @@ def simulate_investment(actual_prices, predicted_prices, starting_capital,
                 position_stop_price = 0
                 stop_loss_triggered = True
         
-        # SHORT stop-loss (stop is ABOVE entry for shorts)
         elif position < 0 and position_type == 'SHORT':
             if current_high >= position_stop_price:
-                # Short was stopped out at loss
                 pnl = abs(position) * (position_entry_price - position_stop_price)
                 capital += pnl + (abs(position) * position_entry_price)
                 stop_loss_pct = ((position_stop_price - position_entry_price) / position_entry_price) * 100
@@ -632,9 +455,9 @@ def simulate_investment(actual_prices, predicted_prices, starting_capital,
         # ==========================================
         bull_regime = current_price > current_ma200 if current_ma200 > 0 else True
         bear_regime = not bull_regime
-        reversal_override = current_price > current_ma20 if current_ma20 > 0 else False  # Price > 20 SMA
+        reversal_override = current_price > current_ma20 if current_ma20 > 0 else False
         volume_ok = current_rvol > RVOL_THRESHOLD
-        strong_trend = current_adx > 30  # ADX > 30 = strong trend, ignore ML sell
+        strong_trend = current_adx > 30
         
         # ==========================================
         # STEP 3: Trading Logic (Regime-Based)
@@ -643,68 +466,42 @@ def simulate_investment(actual_prices, predicted_prices, starting_capital,
         exit_reason = None
         entry_reason = None
         
-        # ==========================================
-        # BULL REGIME: Price > 200 SMA
-        # ==========================================
+        # BULL REGIME
         if bull_regime:
-            # Force cover any shorts immediately in bull regime
             if position < 0:
                 action = 'COVER'
                 exit_reason = 'BULL_REGIME'
-            
-            # Long Entry: ML_Predicts_Up AND RVOL > 0.75
             elif position == 0:
                 if ml_predicts_up and volume_ok:
                     action = 'BUY'
                     entry_reason = 'ML_SIGNAL'
-            
-            # Long Exit: Sell if ML_Predicts_Down, UNLESS ADX > 30 (strong trend)
             elif position > 0:
                 if ml_predicts_down:
                     if strong_trend:
-                        # ADX > 30: Strong trend, ignore ML sell signal (only exit via stop)
-                        pass  # Hold position, let trailing stop handle exit
+                        pass  # Hold, let stop handle exit
                     else:
                         action = 'SELL'
                         exit_reason = 'SIGNAL_SELL'
         
-        # ==========================================
-        # BEAR REGIME: Price < 200 SMA
-        # ==========================================
+        # BEAR REGIME
         elif bear_regime:
-            # Handle existing LONG positions
             if position > 0:
-                # Force sell UNLESS Price > 20 SMA (Reversal Override)
                 if reversal_override:
-                    # Reversal Override: Price recovering above 20 SMA, allow hold
                     if ml_predicts_down and not strong_trend:
                         action = 'SELL'
                         exit_reason = 'SIGNAL_SELL'
                 else:
-                    # No reversal, force close the long
                     action = 'SELL'
                     exit_reason = 'BEAR_REGIME'
-            
-            # Handle existing SHORT positions
             elif position < 0:
-                # Short Exit: Cover if ML_Predicts_Up OR RSI < 30 (oversold = take profit)
                 if ml_predicts_up or current_rsi < 30:
                     action = 'COVER'
                     exit_reason = 'SIGNAL_COVER' if ml_predicts_up else 'RSI_OVERSOLD'
-            
-            # Entry decisions when flat
             elif position == 0:
-                # Long Entry (Reversal): Price > 20 SMA AND ML_Predicts_Up AND RVOL > 0.75
                 if reversal_override and ml_predicts_up and volume_ok:
                     action = 'BUY'
                     entry_reason = 'REVERSAL_LONG'
-                
-                # Short Entry (Balanced Sniper) - HYBRID mode only
                 elif STRATEGY_MODE == 'HYBRID':
-                    # Short ONLY if:
-                    # - ML_Predicts_Down
-                    # - ADX > 15 (market not flat, but lower threshold than before)
-                    # - 50 < RSI < 70 (short the safe bounce, avoid violent reversals)
                     balanced_sniper_conditions = (
                         ml_predicts_down and
                         current_adx > 15 and
@@ -721,7 +518,6 @@ def simulate_investment(actual_prices, predicted_prices, starting_capital,
         if action == 'SELL' and position > 0:
             pnl = position * (current_price - position_entry_price)
             capital += pnl + (position * position_entry_price)
-            
             trade_history.append({
                 'trade_num': len(trade_history) + 1,
                 'type': 'LONG',
@@ -734,7 +530,6 @@ def simulate_investment(actual_prices, predicted_prices, starting_capital,
                 'pnl_percent': (pnl / (abs(position) * position_entry_price)) * 100,
                 'exit_reason': exit_reason
             })
-            
             position = 0
             position_type = None
             position_entry_price = 0
@@ -749,19 +544,16 @@ def simulate_investment(actual_prices, predicted_prices, starting_capital,
             capital = 0
             
         elif action == 'SHORT' and position == 0:
-            position = -(capital / current_price)  # Negative for short
+            position = -(capital / current_price)
             position_type = 'SHORT'
             position_entry_price = current_price
-            # Short stop is ABOVE entry: Entry + (2 * ATR)
             position_stop_price = current_price + (ATR_STOP_MULTIPLIER * current_atr)
             entry_day = i
             capital = 0
             
         elif action == 'COVER' and position < 0:
-            # Close short position: profit = (entry - exit) * shares
             pnl = abs(position) * (position_entry_price - current_price)
             capital += pnl + (abs(position) * position_entry_price)
-            
             trade_history.append({
                 'trade_num': len(trade_history) + 1,
                 'type': 'SHORT',
@@ -774,21 +566,18 @@ def simulate_investment(actual_prices, predicted_prices, starting_capital,
                 'pnl_percent': (pnl / (abs(position) * position_entry_price)) * 100,
                 'exit_reason': exit_reason
             })
-            
             position = 0
             position_type = None
             position_entry_price = 0
             position_stop_price = 0
         
-        # ==========================================
-        # STEP 5: Calculate Daily P&L
-        # ==========================================
+        # Calculate daily P&L
         if position > 0:
             price_change = next_actual_price - current_price
             daily_pnl = position * price_change
             current_value = position * next_actual_price
         elif position < 0:
-            price_change = current_price - next_actual_price  # Shorts profit when price drops
+            price_change = current_price - next_actual_price
             daily_pnl = abs(position) * price_change
             current_value = abs(position) * position_entry_price + daily_pnl
         else:
@@ -798,20 +587,16 @@ def simulate_investment(actual_prices, predicted_prices, starting_capital,
         daily_returns.append(float(daily_pnl))
         capital_history.append(current_value if position != 0 else capital)
         
-        # Update max drawdown
         if capital_history[-1] > peak_capital:
             peak_capital = capital_history[-1]
         drawdown = (peak_capital - capital_history[-1]) / peak_capital if peak_capital > 0 else 0
         max_drawdown = max(max_drawdown, drawdown)
     
-    # ==========================================
     # Close final position
-    # ==========================================
     final_price = float(actual_prices[-1])
     if position > 0:
         pnl = position * (final_price - position_entry_price)
         capital = position * final_price
-        
         trade_history.append({
             'trade_num': len(trade_history) + 1,
             'type': 'LONG',
@@ -827,7 +612,6 @@ def simulate_investment(actual_prices, predicted_prices, starting_capital,
     elif position < 0:
         pnl = abs(position) * (position_entry_price - final_price)
         capital = abs(position) * position_entry_price + pnl
-        
         trade_history.append({
             'trade_num': len(trade_history) + 1,
             'type': 'SHORT',
@@ -844,155 +628,39 @@ def simulate_investment(actual_prices, predicted_prices, starting_capital,
     total_pnl = capital - starting_capital
     return float(total_pnl), daily_returns, trade_history, float(max_drawdown * 100)
 
-def monte_carlo_simulation(model, last_sequence, price_scaler, n_simulations=1000, n_days=14, n_features=1):
-    """Run Monte Carlo simulation for future predictions"""
-    predictions = []
-    
-    for _ in range(n_simulations):
-        current_sequence = last_sequence.copy()
-        sim_predictions = []
-        
-        for _ in range(n_days):
-            # Handle both single and multi-feature models
-            if n_features > 1:
-                pred = model.predict(current_sequence.reshape(1, current_sequence.shape[0], n_features), verbose=0)[0, 0]
-            else:
-                pred = model.predict(current_sequence.reshape(1, -1, 1), verbose=0)[0, 0]
-            
-            # Add random noise based on model uncertainty
-            noise = np.random.normal(0, 0.02)  # 2% standard deviation
-            pred_with_noise = pred * (1 + noise)
-            sim_predictions.append(pred_with_noise)
-            
-            # Update sequence - for multi-feature, only update close price column
-            if n_features > 1:
-                current_sequence = np.roll(current_sequence, -1, axis=0)
-                current_sequence[-1, 0] = pred_with_noise  # Update close price
-            else:
-                current_sequence = np.roll(current_sequence, -1)
-                current_sequence[-1] = pred_with_noise
-        
-        predictions.append(sim_predictions)
-    
-    predictions = np.array(predictions)
-    # Inverse transform predictions using price scaler
-    mean_pred = np.mean(predictions, axis=0).reshape(-1, 1)
-    return price_scaler.inverse_transform(mean_pred)
-
 # ==========================================
-# MAIN ANALYSIS
+# BACKTEST ANALYSIS
 # ==========================================
 
-def analyze_stock(symbol):
-    """Run complete analysis for a single stock"""
+def backtest_stock(symbol):
+    """Run backtest for a single stock using existing model"""
     print(f"\n{'='*50}")
-    print(f"Analyzing {symbol}...")
+    print(f"Backtesting {symbol} on {TEST_NAME}...")
     print(f"{'='*50}")
     
     try:
-        model = None
-        model_info = None
-        scaler = None
-        price_scaler = None
-        feature_columns = None
-        use_features = False
+        # Load existing model
+        print(f"  Loading saved model...")
+        model, model_info = load_saved_model(symbol)
         
-        # Try to load existing model if enabled
-        if LOAD_EXISTING_MODELS:
-            print(f"  Checking for saved model...")
-            model, model_info, is_up_to_date = load_saved_model(symbol, expected_training_end=TEST_END)
-            
-            if model is not None and model_info is not None:
-                saved_date = model_info.get('training_end_date', 'unknown')
-                
-                if is_up_to_date:
-                    print(f"  ✓ Model is UP-TO-DATE (trained through {saved_date})")
-                    scaler = model_info.get('scaler')
-                    price_scaler = model_info.get('price_scaler')
-                    feature_columns = model_info.get('feature_columns')
-                    use_features = model_info.get('use_features', False)
-                    print(f"  Model uses technical indicators: {use_features}")
-                elif AUTO_UPDATE_MODELS:
-                    print(f"  ⚠ Model is OUTDATED (trained through {saved_date}, need {TEST_END})")
-                    print(f"  Retraining model with updated data...")
-                    model = None  # Force retrain
-                    model_info = None
-                else:
-                    print(f"  ⚠ Model is OUTDATED but AUTO_UPDATE_MODELS=False, using anyway")
-                    scaler = model_info.get('scaler')
-                    price_scaler = model_info.get('price_scaler')
-                    feature_columns = model_info.get('feature_columns')
-                    use_features = model_info.get('use_features', False)
-        
-        # Download training data (needed for scaler if not loaded, or for training)
-        print(f"  Downloading training data ({TRAINING_START} to {TRAINING_END})...")
-        train_data = yf.download(symbol, start=TRAINING_START, end=TRAINING_END, progress=False)
-        
-        if len(train_data) < PREDICTION_DAYS + 100:
-            print(f"  ERROR: Not enough training data for {symbol}")
+        if model is None or model_info is None:
+            print(f"  ERROR: No saved model found for {symbol}")
+            print(f"  Please run monte_carlo_analysis.py first to train models.")
             return None
         
-        if model is None or scaler is None:
-            # Use technical indicators if enabled
-            if USE_TECHNICAL_INDICATORS:
-                print(f"  Adding technical indicators (MA, RSI, MACD, Volume-Weighted)...")
-                x_train, y_train, scaler, price_scaler, n_features, feature_columns = prepare_training_data_with_features(
-                    train_data, PREDICTION_DAYS
-                )
-                use_features = True
-                
-                # Build and train model with early stopping
-                print(f"  Building and training LSTM model (with early stopping)...")
-                model = build_lstm_model((x_train.shape[1], n_features))
-                early_stopping = get_early_stopping()
-                model.fit(x_train, y_train, epochs=EPOCHS, batch_size=BATCH_SIZE, 
-                          callbacks=[early_stopping], verbose=1)
-                
-                # Save additional info for later
-                model_info = {
-                    'scaler': scaler,
-                    'price_scaler': price_scaler,
-                    'feature_columns': feature_columns,
-                    'use_features': True,
-                    'training_end_date': TRAINING_END,
-                    'training_start_date': TRAINING_START
-                }
-            else:
-                train_close = train_data[['Close']].values
-                print(f"  Preparing training data...")
-                x_train, y_train, scaler = prepare_training_data(train_close, PREDICTION_DAYS)
-                price_scaler = scaler
-                feature_columns = None
-                use_features = False
-                
-                # Build and train model with early stopping
-                print(f"  Building and training LSTM model (with early stopping)...")
-                model = build_lstm_model((x_train.shape[1], 1))
-                early_stopping = get_early_stopping()
-                model.fit(x_train, y_train, epochs=EPOCHS, batch_size=BATCH_SIZE, 
-                          callbacks=[early_stopping], verbose=1)
-                
-                model_info = {
-                    'scaler': scaler,
-                    'price_scaler': scaler,
-                    'feature_columns': None,
-                    'use_features': False,
-                    'training_end_date': TRAINING_END,
-                    'training_start_date': TRAINING_START
-                }
-            
-            # Save the model if enabled
-            if SAVE_MODELS:
-                if not os.path.exists(MODEL_DIR):
-                    os.makedirs(MODEL_DIR)
-                model_path = os.path.join(MODEL_DIR, f"{symbol}_lstm_model.keras")
-                info_path = os.path.join(MODEL_DIR, f"{symbol}_model_info.pkl")
-                model.save(model_path)
-                with open(info_path, 'wb') as f:
-                    pickle.dump(model_info, f)
-                print(f"  Model saved to: {model_path}")
+        scaler = model_info.get('scaler')
+        price_scaler = model_info.get('price_scaler')
+        feature_columns = model_info.get('feature_columns')
+        use_features = model_info.get('use_features', False)
         
-        # Download test data (past 2 months)
+        print(f"  Model loaded (trained through {model_info.get('training_end_date', 'unknown')})")
+        print(f"  Uses technical indicators: {use_features}")
+        
+        # Download lookback data for indicator calculation
+        print(f"  Downloading lookback data ({LOOKBACK_START} to {TEST_START})...")
+        lookback_data = yf.download(symbol, start=LOOKBACK_START, end=TEST_START, progress=False)
+        
+        # Download test data (2022)
         print(f"  Downloading test data ({TEST_START} to {TEST_END})...")
         test_data = yf.download(symbol, start=TEST_START, end=TEST_END, progress=False)
         
@@ -1002,20 +670,19 @@ def analyze_stock(symbol):
         
         actual_prices = test_data['Close'].values
         
-        # Prepare test data based on whether the model uses features
+        # Prepare test data
         if use_features and feature_columns is not None:
-            x_test = prepare_test_data_with_features(train_data, test_data, scaler, PREDICTION_DAYS, feature_columns)
+            x_test = prepare_test_data_with_features(lookback_data, test_data, scaler, PREDICTION_DAYS, feature_columns)
         else:
-            test_close = test_data['Close']
-            train_close_series = train_data['Close']
-            x_test = prepare_test_data(train_close_series, test_close, scaler, PREDICTION_DAYS)
+            print(f"  ERROR: Model requires features but none found")
+            return None
         
         # Make predictions
         print(f"  Making predictions...")
         predicted_prices = model.predict(x_test, verbose=0)
         predicted_prices = price_scaler.inverse_transform(predicted_prices.reshape(-1, 1))
         
-        # Ensure arrays are same length for metrics
+        # Align arrays
         min_len = min(len(actual_prices), len(predicted_prices))
         actual_prices = actual_prices[:min_len]
         predicted_prices = predicted_prices[:min_len].flatten()
@@ -1027,9 +694,8 @@ def analyze_stock(symbol):
         rmse = calculate_rmse(actual_prices, predicted_prices)
         mape = calculate_mape(actual_prices, predicted_prices)
         
-        # Get additional data for simulation (MA-200, MA-50, RVOL, Low prices, ATR)
-        # Need to recalculate on combined data to get proper values for test period
-        combined_data = pd.concat([train_data, test_data], axis=0)
+        # Get indicators for simulation
+        combined_data = pd.concat([lookback_data, test_data], axis=0)
         combined_data = flatten_columns(combined_data)
         
         close_series = combined_data['Close']
@@ -1048,7 +714,7 @@ def analyze_stock(symbol):
         if isinstance(low_series, pd.DataFrame):
             low_series = low_series.iloc[:, 0]
         
-        # Calculate indicators for test period
+        # Calculate indicators
         ma_200_full = close_series.rolling(window=200).mean()
         ma_50_full = close_series.rolling(window=50).mean()
         ma_20_full = close_series.rolling(window=20).mean()  # NEW: 20-day SMA for reversal override
@@ -1071,9 +737,9 @@ def analyze_stock(symbol):
         low_test = low_series.iloc[test_start_idx:test_start_idx + min_len].values
         high_test = high_series.iloc[test_start_idx:test_start_idx + min_len].values
         
-        # Simulate investment with strategy (Regime-Based with Panic Switch)
+        # Simulate investment (Regime-Based with Panic Switch)
         strategy_desc = "LONG-ONLY" if STRATEGY_MODE == 'LONG_ONLY' else "HYBRID (Balanced Sniper)"
-        print(f"  Simulating {strategy_desc} strategy (ATR Stop: {ATR_STOP_MULTIPLIER}x, RVOL: {RVOL_THRESHOLD})...")
+        print(f"  Simulating {strategy_desc} strategy...")
         total_pnl, daily_returns, trade_history, max_drawdown = simulate_investment(
             actual_prices, predicted_prices, STARTING_CAPITAL,
             ma_200=ma_200_test, ma_50=ma_50_test, ma_20=ma_20_test, rvol=rvol_test, 
@@ -1083,20 +749,18 @@ def analyze_stock(symbol):
         )
         pnl_percent = (total_pnl / STARTING_CAPITAL) * 100
         
-        # Calculate Buy & Hold comparison
+        # Buy & Hold comparison
         buy_hold_return = ((actual_prices[-1] - actual_prices[0]) / actual_prices[0]) * 100
         buy_hold_pnl = STARTING_CAPITAL * (buy_hold_return / 100)
         
-        # Calculate win rate
+        # Win rate
         winning_trades = [t for t in trade_history if t['pnl'] > 0]
         total_trades = len(trade_history)
         win_rate = (len(winning_trades) / total_trades * 100) if total_trades > 0 else 0
         
-        # Monte Carlo simulation
-        print(f"  Running Monte Carlo simulation ({MONTE_CARLO_SIMULATIONS} paths)...")
-        last_sequence = x_test[-1]
-        n_features = last_sequence.shape[-1] if len(last_sequence.shape) > 1 else 1
-        mc_predictions = monte_carlo_simulation(model, last_sequence, price_scaler, MONTE_CARLO_SIMULATIONS, n_features=n_features)
+        # Count trade types
+        long_trades = [t for t in trade_history if t.get('type') == 'LONG']
+        short_trades = [t for t in trade_history if t.get('type') == 'SHORT']
         
         results = {
             'symbol': symbol,
@@ -1112,67 +776,50 @@ def analyze_stock(symbol):
             'final_capital': float(STARTING_CAPITAL + total_pnl),
             'status': 'GAIN' if float(total_pnl) > 0 else 'LOSS',
             'test_days': len(actual_prices),
-            'mc_14day_prediction': float(mc_predictions[-1][0]) if len(mc_predictions) > 0 else None,
             'trade_history': trade_history,
             'max_drawdown': float(max_drawdown),
             'win_rate': float(win_rate),
             'total_trades': total_trades,
+            'long_trades': len(long_trades),
+            'short_trades': len(short_trades),
             'buy_hold_return': float(buy_hold_return),
             'buy_hold_pnl': float(buy_hold_pnl)
         }
         
-        print(f"  ✓ Analysis complete for {symbol}")
+        print(f"  ✓ Backtest complete for {symbol}")
         return results
         
     except Exception as e:
         import traceback
-        print(f"  ERROR analyzing {symbol}: {str(e)}")
+        print(f"  ERROR backtesting {symbol}: {str(e)}")
         traceback.print_exc()
         return None
 
-def generate_report(results):
-    """Generate markdown report with enhanced metrics"""
+def generate_backtest_report(results):
+    """Generate markdown report for backtest"""
     report = []
     
-    # Dynamic title based on strategy mode
     strategy_title = "Long-Only Strategy" if STRATEGY_MODE == 'LONG_ONLY' else "Hybrid Strategy (Sniper Shorts)"
-    report.append(f"# Monte Carlo Stock Analysis Report ({strategy_title})")
+    report.append(f"# Backtest Report: {TEST_NAME}")
+    report.append(f"\n## {strategy_title}")
     report.append(f"\n**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    report.append(f"\n**Analysis Period:** {TEST_START} to {TEST_END} (Past {TEST_DAYS} Days)")
-    report.append(f"\n**Training Period:** {TRAINING_START} to {TRAINING_END} (Rolling {ROLLING_WINDOW_YEARS}-Year Window)")
-    report.append(f"\n**Monte Carlo Simulations:** {MONTE_CARLO_SIMULATIONS}")
+    report.append(f"\n**Test Period:** {TEST_START} to {TEST_END}")
     report.append(f"\n**Starting Capital per Stock:** ${STARTING_CAPITAL:,.2f}")
-    report.append(f"\n**Training Epochs:** {EPOCHS} (with early stopping, patience={EARLY_STOPPING_PATIENCE})")
+    report.append(f"\n**Note:** Using models trained on recent data to test on historical bearish period")
     
-    # Strategy Parameters
-    report.append("\n\n## Strategy Configuration\n")
-    report.append(f"| Parameter | Value |")
-    report.append(f"|-----------|-------|")
-    report.append(f"| Strategy Mode | **{STRATEGY_MODE}** |")
-    report.append(f"| Confidence Threshold | {CONFIDENCE_THRESHOLD*100}% |")
-    report.append(f"| Stop-Loss Type | Dynamic ATR ({ATR_STOP_MULTIPLIER}x ATR) |")
-    report.append(f"| RVOL Threshold | {RVOL_THRESHOLD} (relaxed to avoid dead volume only) |")
-    report.append(f"| Macro Filter (200-SMA) | {'Enabled' if USE_MACRO_FILTER else 'Disabled'} |")
-    report.append(f"| Trend Override | {'Enabled (Buy when Price > 200 SMA AND > 50 SMA)' if USE_TREND_OVERRIDE else 'Disabled'} |")
-    
-    # Sniper Short parameters (only show if HYBRID mode)
-    if STRATEGY_MODE == 'HYBRID':
-        report.append(f"| **Sniper Short Enabled** | **YES** |")
-        report.append(f"| Short ADX Threshold | > {SNIPER_ADX_THRESHOLD} (strong trend) |")
-        report.append(f"| Short RSI Threshold | < {SNIPER_RSI_THRESHOLD} (bearish momentum) |")
-        report.append(f"| Short Conditions | Price < 200 SMA + ADX > {SNIPER_ADX_THRESHOLD} + RSI < {SNIPER_RSI_THRESHOLD} |")
-    else:
-        report.append(f"| Sniper Short | Disabled (Long-Only Mode) |")
-    
-    report.append(f"| RSI Period | {RSI_PERIOD} |")
-    report.append(f"| MACD Parameters | ({MACD_FAST}, {MACD_SLOW}, {MACD_SIGNAL}) |")
-    report.append(f"| MFI Period | {MFI_PERIOD} |")
-    report.append(f"| Volume Indicators | OBV, MFI, VWAP, RVOL, ATR, ADX |")
+    # Market Context
+    report.append("\n\n## Market Context: 2022 Tech Wreck\n")
+    report.append("The 2022 bear market was characterized by:")
+    report.append("- **Fed Rate Hikes:** Aggressive interest rate increases to combat inflation")
+    report.append("- **Tech Selloff:** High-growth tech stocks hit particularly hard")
+    report.append("- **QQQ:** Dropped ~33% from peak to trough")
+    report.append("- **NASDAQ:** Worst performance since 2008 financial crisis")
+    report.append("- **Key Theme:** Flight from growth stocks to value/defensive sectors")
     
     # Summary Table
     report.append("\n\n## Summary Results\n")
-    report.append("| Stock | Strategy Return | Buy & Hold | Win Rate | Max DD | Trades | Status |")
-    report.append("|-------|-----------------|------------|----------|--------|--------|--------|")
+    report.append("| Stock | Strategy Return | Buy & Hold | Outperform | Win Rate | Max DD | Trades (L/S) | Status |")
+    report.append("|-------|-----------------|------------|------------|----------|--------|--------------|--------|")
     
     total_pnl = 0
     total_buy_hold_pnl = 0
@@ -1184,11 +831,12 @@ def generate_report(results):
     
     for r in valid_results:
         status_emoji = "✅" if r['status'] == 'GAIN' else "❌"
-        outperform = "📈" if r['pnl_percent'] > r['buy_hold_return'] else "📉"
+        outperform_val = r['pnl_percent'] - r['buy_hold_return']
+        outperform = f"+{outperform_val:.1f}% 📈" if outperform_val > 0 else f"{outperform_val:.1f}% 📉"
         report.append(
             f"| {r['symbol']} | {r['pnl_percent']:+.1f}% (${r['total_pnl']:+,.0f}) | "
-            f"{r['buy_hold_return']:+.1f}% {outperform} | {r['win_rate']:.0f}% | "
-            f"{r['max_drawdown']:.1f}% | {r['total_trades']} | {status_emoji} {r['status']} |"
+            f"{r['buy_hold_return']:+.1f}% | {outperform} | {r['win_rate']:.0f}% | "
+            f"{r['max_drawdown']:.1f}% | {r['total_trades']} ({r['long_trades']}L/{r['short_trades']}S) | {status_emoji} {r['status']} |"
         )
         total_pnl += r['total_pnl']
         total_buy_hold_pnl += r['buy_hold_pnl']
@@ -1209,176 +857,131 @@ def generate_report(results):
     outperformance = portfolio_return - buy_hold_portfolio_return
     report.append(f"\n**Strategy vs Buy & Hold:** {outperformance:+.2f}% {'(Outperformed ✅)' if outperformance > 0 else '(Underperformed ❌)'}")
     
+    if outperformance > 0:
+        report.append(f"\n🎯 **The strategy PROTECTED capital during the 2022 bear market!**")
+        report.append(f"   While buy & hold lost ${abs(total_buy_hold_pnl):,.2f}, the strategy only lost ${abs(total_pnl):,.2f} (or gained if positive).")
+    else:
+        report.append(f"\n⚠️ Note: Strategy underperformed during this specific period.")
+    
     # Detailed Results
     report.append("\n\n## Detailed Stock Analysis\n")
     
     for r in valid_results:
         report.append(f"\n### {r['symbol']}\n")
+        
+        # Price movement
+        price_change_pct = ((r['end_price'] - r['start_price']) / r['start_price']) * 100
+        report.append(f"**Stock Movement:** ${r['start_price']:.2f} → ${r['end_price']:.2f} ({price_change_pct:+.1f}%)\n")
+        
         report.append(f"| Metric | Value |")
         report.append(f"|--------|-------|")
-        report.append(f"| Start Price | ${r['start_price']:.2f} |")
-        report.append(f"| End Price | ${r['end_price']:.2f} |")
         report.append(f"| Directional Accuracy | {r['directional_accuracy']:.2f}% |")
-        report.append(f"| Mean Squared Error | {r['mse']:.4f} |")
-        report.append(f"| Root Mean Squared Error | ${r['rmse']:.2f} |")
-        report.append(f"| Mean Absolute Percentage Error | {r['mape']:.2f}% |")
+        report.append(f"| RMSE | ${r['rmse']:.2f} |")
+        report.append(f"| MAPE | {r['mape']:.2f}% |")
         report.append(f"| Starting Capital | ${r['starting_capital']:,.2f} |")
         report.append(f"| Final Capital | ${r['final_capital']:,.2f} |")
         report.append(f"| **Strategy Return** | **{r['pnl_percent']:+.2f}%** |")
         report.append(f"| Buy & Hold Return | {r['buy_hold_return']:+.2f}% |")
         report.append(f"| Max Drawdown | {r['max_drawdown']:.2f}% |")
         report.append(f"| Win Rate | {r['win_rate']:.1f}% |")
-        report.append(f"| Total Trades | {r['total_trades']} |")
+        report.append(f"| Total Trades | {r['total_trades']} ({r['long_trades']} Long, {r['short_trades']} Short) |")
         report.append(f"| Trading Days | {r['test_days']} |")
-        if r['mc_14day_prediction']:
-            report.append(f"| MC 14-Day Prediction | ${r['mc_14day_prediction']:.2f} |")
         
-        # Trade History Breakdown
+        # Trade History
         if r.get('trade_history') and len(r['trade_history']) > 0:
-            report.append(f"\n#### Trade History for {r['symbol']}\n")
-            report.append("| # | Entry Day | Exit Day | Entry $ | Exit $ | Shares | P&L | Return | Exit Reason |")
-            report.append("|---|-----------|----------|---------|--------|--------|-----|--------|-------------|")
+            report.append(f"\n#### Trade History\n")
+            report.append("| # | Type | Entry Day | Exit Day | Entry $ | Exit $ | P&L | Return | Exit Reason |")
+            report.append("|---|------|-----------|----------|---------|--------|-----|--------|-------------|")
             
             for t in r['trade_history']:
                 status_icon = "+" if t['pnl'] >= 0 else ""
-                exit_reason = t.get('exit_reason', 'N/A')
-                # Add emoji for exit reason
-                reason_emoji = {
-                    'STOP-LOSS': '🛑',
-                    'SIGNAL_SELL': '📊',
-                    'MACRO_FILTER': '📉',
-                    'END_OF_PERIOD': '⏰'
-                }.get(exit_reason, '')
+                type_emoji = "📈" if t['type'] == 'LONG' else "📉"
                 report.append(
-                    f"| {t['trade_num']} | Day {t['entry_day']} | Day {t['exit_day']} | "
-                    f"${t['entry_price']:.2f} | ${t['exit_price']:.2f} | {t['shares']:.2f} | "
-                    f"${status_icon}{t['pnl']:.2f} | {status_icon}{t['pnl_percent']:.2f}% | {reason_emoji} {exit_reason} |"
+                    f"| {t['trade_num']} | {type_emoji} {t['type']} | Day {t['entry_day']} | Day {t['exit_day']} | "
+                    f"${t['entry_price']:.2f} | ${t['exit_price']:.2f} | "
+                    f"${status_icon}{t['pnl']:.2f} | {status_icon}{t['pnl_percent']:.2f}% | {t.get('exit_reason', 'N/A')} |"
                 )
-            
-            # Trade summary with exit reason breakdown
-            winning_trades = [t for t in r['trade_history'] if t['pnl'] > 0]
-            losing_trades = [t for t in r['trade_history'] if t['pnl'] <= 0]
-            stop_loss_trades = [t for t in r['trade_history'] if t.get('exit_reason') == 'STOP-LOSS']
-            signal_sells = [t for t in r['trade_history'] if t.get('exit_reason') == 'SIGNAL_SELL']
-            macro_exits = [t for t in r['trade_history'] if t.get('exit_reason') == 'MACRO_FILTER']
-            total_trades = len(r['trade_history'])
-            
-            report.append(f"\n**Trade Summary:**")
-            report.append(f"- Total Trades: {total_trades}")
-            report.append(f"- Winning Trades: {len(winning_trades)} ({len(winning_trades)/total_trades*100:.1f}%)")
-            report.append(f"- Losing Trades: {len(losing_trades)} ({len(losing_trades)/total_trades*100:.1f}%)")
-            if winning_trades:
-                report.append(f"- Total Gains: ${sum(t['pnl'] for t in winning_trades):,.2f}")
-            if losing_trades:
-                report.append(f"- Total Losses: ${sum(t['pnl'] for t in losing_trades):,.2f}")
-            
-            report.append(f"\n**Exit Reason Breakdown:**")
-            report.append(f"- 🛑 Stop-Loss Hits: {len(stop_loss_trades)}")
-            report.append(f"- 📊 Signal Sells: {len(signal_sells)}")
-            report.append(f"- 📉 Macro Filter Exits: {len(macro_exits)}")
-            
-            # Count sniper short trades
-            short_trades = [t for t in r['trade_history'] if t.get('type') == 'SHORT']
-            if short_trades:
-                report.append(f"- 📉 Sniper Short Trades: {len(short_trades)}")
     
-    # Metrics Explanation
-    report.append("\n\n## Strategy Explanation\n")
-    report.append("### Decision Logic")
-    report.append("1. **Macro Filter:** Only go LONG when Close > 200-day SMA (bullish regime)")
-    report.append("2. **Buy Signal (ML):** Model predicts price increase > threshold AND RVOL > 0.75")
-    report.append("3. **Buy Signal (Trend Override):** Price > 200 SMA AND > 50 SMA AND RVOL > 0.75 (trust the trend)")
-    report.append("4. **Sell Signal:** Model predicts significant price decrease (< -threshold)")
-    report.append("5. **Stop-Loss:** Dynamic ATR-based exit (Entry - 2×ATR for longs, Entry + 2×ATR for shorts)")
+    # Key Insights
+    report.append("\n\n## Key Insights\n")
     
-    if STRATEGY_MODE == 'HYBRID':
-        report.append("")
-        report.append("### Sniper Short Logic (HYBRID Mode)")
-        report.append(f"Shorts are ONLY allowed when ALL conditions are met:")
-        report.append(f"1. **Price < 200 SMA:** Stock is in a technical downtrend")
-        report.append(f"2. **ADX > {SNIPER_ADX_THRESHOLD}:** Trend is strong (not ranging)")
-        report.append(f"3. **RSI < {SNIPER_RSI_THRESHOLD}:** Momentum is bearish")
-        report.append(f"4. **ML predicts down:** Model confirms downward movement")
-        report.append(f"5. **RVOL > {RVOL_THRESHOLD}:** Volume confirms the move")
-        report.append("")
-        report.append("**Short Exit Conditions:**")
-        report.append("- RSI rises above 50 (momentum shift)")
-        report.append("- ML predicts upward movement")
-        report.append("- ATR stop-loss hit (Entry + 2×ATR)")
+    # Count stocks that beat buy & hold
+    beat_buy_hold = sum(1 for r in valid_results if r['pnl_percent'] > r['buy_hold_return'])
+    report.append(f"- **Stocks that beat Buy & Hold:** {beat_buy_hold} of {len(valid_results)}")
     
-    report.append("")
-    report.append("### Dynamic Stop-Loss (ATR)")
-    report.append("- **Volatile stocks (NVDA, TSLA):** Stop widens to 4-5% automatically")
-    report.append("- **Stable stocks (SPY):** Stop tightens to 1-2% automatically")
-    report.append("- **Long Formula:** Stop Price = Entry Price - (2 × ATR)")
-    report.append("- **Short Formula:** Stop Price = Entry Price + (2 × ATR)")
-    report.append("")
-    report.append("### Volume-Weighted Indicators")
-    report.append("- **OBV (On-Balance Volume):** Detects divergence between price and volume")
-    report.append("- **MFI (Money Flow Index):** Volume-weighted RSI with 21-day period")
-    report.append("- **VWAP:** Identifies institutional support/resistance levels")
-    report.append("- **RVOL:** Current volume vs 20-day average (>0.75 = acceptable volume)")
-    report.append("- **ATR:** Average True Range for dynamic stop-loss calculation")
-    report.append("- **ADX:** Average Directional Index for trend strength (>25 = strong trend)")
-    report.append("")
-    report.append("### Exit Reasons")
-    report.append("- 🛑 **ATR-STOP:** Dynamic stop-loss hit (adapts to stock volatility)")
-    report.append("- 📊 **SIGNAL_SELL:** Model prediction turned bearish (long exit)")
-    report.append("- 📊 **SIGNAL_COVER:** Model prediction turned bullish (short exit)")
-    report.append("- 📉 **MACRO_FILTER:** Price crossed 200-day SMA (regime change)")
-    report.append("- ⏰ **END_OF_PERIOD:** Position held until analysis period ended")
+    # Best and worst performers
+    if valid_results:
+        best = max(valid_results, key=lambda x: x['pnl_percent'])
+        worst = min(valid_results, key=lambda x: x['pnl_percent'])
+        report.append(f"- **Best Performer:** {best['symbol']} ({best['pnl_percent']:+.1f}%)")
+        report.append(f"- **Worst Performer:** {worst['symbol']} ({worst['pnl_percent']:+.1f}%)")
+        
+        # Count total shorts
+        total_shorts = sum(r['short_trades'] for r in valid_results)
+        if total_shorts > 0:
+            report.append(f"- **Sniper Short Trades:** {total_shorts} total across all stocks")
+    
+    report.append("\n\n## Conclusion\n")
+    if outperformance > 0:
+        report.append(f"✅ **The strategy successfully protected capital during the 2022 bear market.**")
+        report.append(f"\nBy using the macro filter (200-day SMA) and sniper shorts, the strategy avoided ")
+        report.append(f"extended exposure during the downturn. This demonstrates the value of:")
+        report.append(f"1. Staying out of the market when macro conditions are bearish")
+        report.append(f"2. Using ATR-based stop-losses to limit drawdowns")
+        report.append(f"3. Sniper shorting opportunities during confirmed downtrends")
+    else:
+        report.append(f"⚠️ The strategy underperformed during this specific period.")
+        report.append(f"\nPotential improvements to consider:")
+        report.append(f"- Adjust macro filter sensitivity")
+        report.append(f"- Tighten stop-losses during volatile periods")
+        report.append(f"- Consider more aggressive shorting during confirmed bear markets")
     
     return "\n".join(report)
 
 # ==========================================
-# RUN ANALYSIS
+# RUN BACKTEST
 # ==========================================
 
 if __name__ == "__main__":
-    # Generate timestamped report filename in reports folder
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     REPORTS_DIR = 'reports'
     if not os.path.exists(REPORTS_DIR):
         os.makedirs(REPORTS_DIR)
-    REPORT_FILENAME = os.path.join(REPORTS_DIR, f"Stock_Analysis_Report_{timestamp}.md")
+    REPORT_FILENAME = os.path.join(REPORTS_DIR, f"Backtest_2020_CovidCrash_{timestamp}.md")
     
     strategy_title = "LONG-ONLY" if STRATEGY_MODE == 'LONG_ONLY' else "HYBRID (Sniper Shorts)"
     
     print("=" * 70)
-    print(f"MONTE CARLO STOCK ANALYSIS - {strategy_title}")
+    print(f"BACKTEST: {TEST_NAME}")
+    print(f"Strategy: {strategy_title}")
     print("=" * 70)
     print(f"Stocks: {', '.join(STOCKS)}")
-    print(f"Training Period: {TRAINING_START} to {TRAINING_END} ({ROLLING_WINDOW_YEARS}-Year Rolling Window)")
     print(f"Test Period: {TEST_START} to {TEST_END}")
     print(f"Starting Capital: ${STARTING_CAPITAL:,} per stock")
-    print(f"Stop-Loss: {ATR_STOP_MULTIPLIER}x ATR (Dynamic) | Threshold: {CONFIDENCE_THRESHOLD*100}% | RVOL Min: {RVOL_THRESHOLD}")
-    print(f"Trend Override: {'Enabled' if USE_TREND_OVERRIDE else 'Disabled'}")
-    if STRATEGY_MODE == 'HYBRID':
-        print(f"Sniper Shorts: Enabled (ADX > {SNIPER_ADX_THRESHOLD}, RSI < {SNIPER_RSI_THRESHOLD})")
+    print(f"Using existing trained models (not retraining)")
     print(f"Report will be saved as: {REPORT_FILENAME}")
     print("=" * 70)
     
     results = []
     for symbol in STOCKS:
-        result = analyze_stock(symbol)
+        result = backtest_stock(symbol)
         results.append(result)
     
     # Generate report
     print("\n" + "=" * 70)
-    print("GENERATING REPORT...")
+    print("GENERATING BACKTEST REPORT...")
     print("=" * 70)
     
-    report = generate_report(results)
+    report = generate_backtest_report(results)
     
-    # Save report with timestamped filename
     with open(REPORT_FILENAME, 'w', encoding='utf-8') as f:
         f.write(report)
     
     print(f"\n✓ Report saved to: {REPORT_FILENAME}")
     
-    # Print summary to console
+    # Print summary
     print("\n" + "=" * 70)
-    print("QUICK SUMMARY (Strategy vs Buy & Hold)")
+    print(f"BACKTEST SUMMARY: {TEST_NAME}")
     print("=" * 70)
     
     valid_results = [r for r in results if r is not None]
@@ -1386,23 +989,27 @@ if __name__ == "__main__":
     if len(valid_results) == 0:
         print("No valid results to display.")
     else:
-        print(f"{'Stock':6} | {'Strategy':>12} | {'Buy&Hold':>10} | {'MaxDD':>6} | {'WinRate':>7} | {'Trades':>6} | Status")
-        print("-" * 70)
+        print(f"{'Stock':6} | {'Strategy':>12} | {'Buy&Hold':>10} | {'Outperf':>10} | {'MaxDD':>6} | {'Trades':>8} | Status")
+        print("-" * 80)
         for r in valid_results:
             status = "✅ GAIN" if r['status'] == 'GAIN' else "❌ LOSS"
-            outperform = "📈" if r['pnl_percent'] > r['buy_hold_return'] else "📉"
-            print(f"{r['symbol']:6} | {r['pnl_percent']:+10.1f}% | {r['buy_hold_return']:+8.1f}% {outperform} | "
-                  f"{r['max_drawdown']:5.1f}% | {r['win_rate']:5.0f}%  | {r['total_trades']:>6} | {status}")
+            outperf = r['pnl_percent'] - r['buy_hold_return']
+            outperf_icon = "📈" if outperf > 0 else "📉"
+            print(f"{r['symbol']:6} | {r['pnl_percent']:+10.1f}% | {r['buy_hold_return']:+8.1f}% | {outperf:+8.1f}% {outperf_icon} | "
+                  f"{r['max_drawdown']:5.1f}% | {r['long_trades']}L/{r['short_trades']}S   | {status}")
         
         total_pnl = sum(r['total_pnl'] for r in valid_results)
         total_buy_hold = sum(r['buy_hold_pnl'] for r in valid_results)
         total_invested = STARTING_CAPITAL * len(valid_results)
         
-        print("-" * 70)
+        print("-" * 80)
         strategy_return = (total_pnl / total_invested) * 100
         buy_hold_return = (total_buy_hold / total_invested) * 100
+        outperformance = strategy_return - buy_hold_return
         print(f"TOTAL  | Strategy: {strategy_return:+.1f}% | Buy&Hold: {buy_hold_return:+.1f}%")
         print(f"       | P&L: ${total_pnl:+,.2f} vs ${total_buy_hold:+,.2f}")
-        outperformance = strategy_return - buy_hold_return
         print(f"       | Outperformance: {outperformance:+.2f}% {'✅' if outperformance > 0 else '❌'}")
+        
+        if outperformance > 0:
+            print(f"\n🎯 Strategy outperformed Buy & Hold by {outperformance:.1f}% during the 2020 bear market!")
     print("=" * 70)
