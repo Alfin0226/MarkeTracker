@@ -33,10 +33,10 @@ class ErrorBoundary extends React.Component {
                     <h2 style={{
                         fontSize: '1.5rem',
                         marginBottom: '0.5rem',
-                        color: '#333',
+                        color: 'var(--text-heading)',
                     }}>Something went wrong</h2>
                     <p style={{
-                        color: '#666',
+                        color: 'var(--text-secondary)',
                         marginBottom: '1.5rem',
                         maxWidth: '400px',
                     }}>
@@ -46,13 +46,14 @@ class ErrorBoundary extends React.Component {
                         onClick={this.handleRetry}
                         style={{
                             padding: '0.75rem 1.5rem',
-                            backgroundColor: '#007bff',
+                            background: 'var(--gradient-primary)',
                             color: 'white',
                             border: 'none',
-                            borderRadius: '8px',
+                            borderRadius: 'var(--radius-sm)',
                             cursor: 'pointer',
                             fontSize: '1rem',
                             fontWeight: '600',
+                            fontFamily: 'Inter, sans-serif',
                         }}
                     >
                         Try Again
