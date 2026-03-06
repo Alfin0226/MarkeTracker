@@ -5,6 +5,8 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import StockTracker from './pages/StockTracker';
 import Portfolio from './pages/Portfolio';
+import TransactionHistory from './pages/TransactionHistory';
+import Watchlist from './pages/Watchlist';
 import PrivateRoute from './components/PrivateRoute';
 import ErrorBoundary from './components/ErrorBoundary';
 import { Analytics } from '@vercel/analytics/react';
@@ -34,6 +36,22 @@ function App() {
               element={
                 <PrivateRoute>
                   <Portfolio />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/transactions"
+              element={
+                <PrivateRoute>
+                  <TransactionHistory />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/watchlist"
+              element={
+                <PrivateRoute>
+                  <Watchlist />
                 </PrivateRoute>
               }
             />

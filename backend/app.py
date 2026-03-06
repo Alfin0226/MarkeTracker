@@ -5,7 +5,7 @@ import yfinance as yf
 from datetime import datetime, timedelta, timezone
 import bcrypt
 from database import db
-from models import User, Portfolio, Transaction, Company
+from models import User, Portfolio, Transaction, Company, Watchlist
 from sqlalchemy import or_, case
 import os
 from dotenv import load_dotenv
@@ -502,6 +502,194 @@ def proxy_comparison(symbol):
 def proxy_dashboard(symbol):
     data, status = get_dashboard_data(symbol)
     return jsonify(data), status
+
+# ===========================
+# TRANSACTION HISTORY
+# ===========================
+
+@app.route('/api/transactions', methods=['GET'])
+@jwt_required()
+def get_transactions():
+    try:
+        email = get_jwt_identity()
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 50, type=int)
+        per_page = min(per_page, 100)  # Cap at 100
+
+        transactions = Transaction.query.filter_by(user_id=user.id) \
+            .order_by(Transaction.timestamp.desc()) \
+            .paginate(page=page, per_page=per_page, error_out=False)
+
+        return jsonify({
+            'transactions': [{
+                'id': t.id,
+                'symbol': t.symbol,
+                'shares': t.shares,
+                'price': float(t.price),
+                'action': t.action,
+                'total': float(t.price * t.shares),
+                'timestamp': t.timestamp.isoformat() if t.timestamp else None
+            } for t in transactions.items],
+            'total': transactions.total,
+            'pages': transactions.pages,
+            'current_page': transactions.page
+        })
+    except Exception as e:
+        logger.error(f"Error fetching transactions: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+# ===========================
+# WATCHLIST
+# ===========================
+
+@app.route('/api/watchlist', methods=['GET'])
+@jwt_required()
+def get_watchlist():
+    try:
+        email = get_jwt_identity()
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+
+        items = Watchlist.query.filter_by(user_id=user.id) \
+            .order_by(Watchlist.added_at.desc()).all()
+
+        watchlist_data = []
+        for item in items:
+            entry = {
+                'symbol': item.symbol,
+                'added_at': item.added_at.isoformat() if item.added_at else None,
+            }
+            try:
+                price = get_stock_price(item.symbol)
+                entry['current_price'] = float(price)
+            except Exception:
+                entry['current_price'] = None
+            watchlist_data.append(entry)
+
+        return jsonify({'watchlist': watchlist_data})
+    except Exception as e:
+        logger.error(f"Error fetching watchlist: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/watchlist', methods=['POST'])
+@jwt_required()
+def add_to_watchlist():
+    try:
+        email = get_jwt_identity()
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+
+        data = request.get_json()
+        symbol = data.get('symbol', '').upper().strip()
+        if not symbol:
+            return jsonify({'error': 'Symbol is required'}), 400
+
+        existing = Watchlist.query.filter_by(user_id=user.id, symbol=symbol).first()
+        if existing:
+            return jsonify({'error': 'Already in watchlist'}), 400
+
+        entry = Watchlist(user_id=user.id, symbol=symbol)
+        db.session.add(entry)
+        db.session.commit()
+
+        return jsonify({'message': f'{symbol} added to watchlist'}), 201
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error adding to watchlist: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/watchlist/<symbol>', methods=['DELETE'])
+@jwt_required()
+def remove_from_watchlist(symbol):
+    try:
+        email = get_jwt_identity()
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+
+        entry = Watchlist.query.filter_by(user_id=user.id, symbol=symbol.upper()).first()
+        if not entry:
+            return jsonify({'error': 'Not in watchlist'}), 404
+
+        db.session.delete(entry)
+        db.session.commit()
+
+        return jsonify({'message': f'{symbol} removed from watchlist'})
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error removing from watchlist: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+# ===========================
+# PORTFOLIO HISTORY
+# ===========================
+
+@app.route('/api/portfolio/history', methods=['GET'])
+@jwt_required()
+def get_portfolio_history():
+    """Compute approximate daily portfolio value from transaction history."""
+    try:
+        email = get_jwt_identity()
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+
+        transactions = Transaction.query.filter_by(user_id=user.id) \
+            .order_by(Transaction.timestamp.asc()).all()
+
+        if not transactions:
+            return jsonify({'history': [], 'message': 'No transactions yet'})
+
+        # Build daily snapshots
+        from collections import defaultdict
+        import itertools
+
+        holdings = defaultdict(int)  # symbol -> shares
+        cash = 1000000.0  # Starting balance
+        daily_snapshots = []
+
+        # Group transactions by date
+        for date_key, group in itertools.groupby(
+            transactions, key=lambda t: t.timestamp.date() if t.timestamp else None
+        ):
+            if date_key is None:
+                continue
+            for t in group:
+                if t.action == 'buy':
+                    holdings[t.symbol] += t.shares
+                    cash -= t.price * t.shares
+                elif t.action == 'sell':
+                    holdings[t.symbol] -= t.shares
+                    cash += t.price * t.shares
+                    if holdings[t.symbol] <= 0:
+                        del holdings[t.symbol]
+
+            # Estimate portfolio value at end of this day
+            stock_value = 0
+            for sym, shares in holdings.items():
+                try:
+                    price = get_stock_price(sym)
+                    stock_value += price * shares
+                except Exception:
+                    pass
+
+            daily_snapshots.append({
+                'date': date_key.isoformat(),
+                'total_value': round(cash + stock_value, 2),
+                'cash': round(cash, 2),
+                'stock_value': round(stock_value, 2)
+            })
+
+        return jsonify({'history': daily_snapshots})
+    except Exception as e:
+        logger.error(f"Error computing portfolio history: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)

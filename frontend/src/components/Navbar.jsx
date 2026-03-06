@@ -15,16 +15,22 @@ function Navbar() {
     <nav className="navbar navbar-expand-lg navbar-dark bg-dark">
       <div className="container">
         <Link className="navbar-brand" to="/">
-          MarkeTracker ( Home Page )
+          MarkeTracker
         </Link>
         <div className="navbar-nav">
           {isAuthenticated ? (
             <>
               <Link className="nav-link" to="/dashboard">
-                Stock Dashboard
+                Dashboard
               </Link>
               <Link className="nav-link" to="/portfolio">
                 Portfolio
+              </Link>
+              <Link className="nav-link" to="/transactions">
+                History
+              </Link>
+              <Link className="nav-link" to="/watchlist">
+                Watchlist
               </Link>
               <button className="nav-link btn btn-link" onClick={handleLogout}>
                 Logout

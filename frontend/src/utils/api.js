@@ -23,7 +23,6 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 422) {
-      // Clear token and redirect to login for token-related errors
       localStorage.removeItem('token');
       window.location.href = '/login';
     }
@@ -63,7 +62,6 @@ export const searchSymbols = async (query) => {
 
 export const login = async (credentials) => {
   const response = await api.post('/api/login', credentials);
-  // Handle both token and access_token formats
   const token = response.data.token || response.data.access_token;
   if (token) {
     localStorage.setItem('token', token);
@@ -73,5 +71,42 @@ export const login = async (credentials) => {
 
 export const register = async (userData) => {
   const response = await api.post('/api/register', userData);
+  return response.data;
+};
+
+// ===========================
+// TRANSACTION HISTORY
+// ===========================
+
+export const fetchTransactions = async (page = 1, perPage = 50) => {
+  const response = await api.get(`/api/transactions?page=${page}&per_page=${perPage}`);
+  return response.data;
+};
+
+// ===========================
+// WATCHLIST
+// ===========================
+
+export const fetchWatchlist = async () => {
+  const response = await api.get('/api/watchlist');
+  return response.data;
+};
+
+export const addToWatchlist = async (symbol) => {
+  const response = await api.post('/api/watchlist', { symbol });
+  return response.data;
+};
+
+export const removeFromWatchlist = async (symbol) => {
+  const response = await api.delete(`/api/watchlist/${symbol}`);
+  return response.data;
+};
+
+// ===========================
+// PORTFOLIO HISTORY
+// ===========================
+
+export const fetchPortfolioHistory = async () => {
+  const response = await api.get('/api/portfolio/history');
   return response.data;
 };

@@ -27,15 +27,12 @@ class Portfolio(db.Model):
 
 @event.listens_for(Portfolio.__table__, 'after_create')
 def create_portfolio_sequence(target, connection, **kw):
-    # Get the current maximum ID
     result = connection.execute(text('SELECT MAX(id) FROM portfolio'))
     max_id = result.scalar() or 0
-    
-    # Create a new sequence starting after the max ID
     sequence_name = 'portfolio_id_seq'
     connection.execute(text(f'DROP SEQUENCE IF EXISTS {sequence_name}'))
     connection.execute(text(f'CREATE SEQUENCE {sequence_name} START WITH {max_id + 1}'))
-    connection.execute(text(f'ALTER TABLE portfolio ALTER COLUMN id SET DEFAULT nextval(\'{sequence_name}\')'))
+    connection.execute(text(f"ALTER TABLE portfolio ALTER COLUMN id SET DEFAULT nextval('{sequence_name}')"))
 
 class Transaction(db.Model):
     __tablename__ = 'transaction'
@@ -49,12 +46,26 @@ class Transaction(db.Model):
 
 @event.listens_for(Transaction.__table__, 'after_create')
 def create_transaction_sequence(target, connection, **kw):
-    # Get the current maximum ID
     result = connection.execute(text('SELECT MAX(id) FROM transaction'))
     max_id = result.scalar() or 0
-    
-    # Create a new sequence starting after the max ID
     sequence_name = 'transaction_id_seq'
     connection.execute(text(f'DROP SEQUENCE IF EXISTS {sequence_name}'))
     connection.execute(text(f'CREATE SEQUENCE {sequence_name} START WITH {max_id + 1}'))
-    connection.execute(text(f'ALTER TABLE transaction ALTER COLUMN id SET DEFAULT nextval(\'{sequence_name}\')'))
+    connection.execute(text(f"ALTER TABLE transaction ALTER COLUMN id SET DEFAULT nextval('{sequence_name}')"))
+
+class Watchlist(db.Model):
+    __tablename__ = 'watchlist'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    symbol = db.Column(db.String(10), nullable=False)
+    added_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    __table_args__ = (db.UniqueConstraint('user_id', 'symbol', name='uix_user_watchlist_symbol'),)
+
+@event.listens_for(Watchlist.__table__, 'after_create')
+def create_watchlist_sequence(target, connection, **kw):
+    result = connection.execute(text('SELECT MAX(id) FROM watchlist'))
+    max_id = result.scalar() or 0
+    sequence_name = 'watchlist_id_seq'
+    connection.execute(text(f'DROP SEQUENCE IF EXISTS {sequence_name}'))
+    connection.execute(text(f'CREATE SEQUENCE {sequence_name} START WITH {max_id + 1}'))
+    connection.execute(text(f"ALTER TABLE watchlist ALTER COLUMN id SET DEFAULT nextval('{sequence_name}')"))

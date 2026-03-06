@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import Chart from 'chart.js/auto';
 import '../styles/Dashboard.css';
 import { useParams, useNavigate } from 'react-router-dom';
-import { fetchDashboardData as apiFetchDashboardData, fetchComparisonData as apiFetchComparisonData, searchSymbols } from '../utils/api';
+import { fetchDashboardData as apiFetchDashboardData, fetchComparisonData as apiFetchComparisonData, searchSymbols, addToWatchlist, removeFromWatchlist, fetchWatchlist } from '../utils/api';
 
 const Dashboard = () => {
   const { symbol } = useParams();
@@ -17,6 +17,9 @@ const Dashboard = () => {
   const chartRef = useRef(null);
   const chartInstance = useRef(null);
   const searchTimerRef = useRef(null);
+  const pollingRef = useRef(null);
+  const [isPolling, setIsPolling] = useState(false);
+  const [isWatchlisted, setIsWatchlisted] = useState(false);
 
   const fetchAllData = useCallback(async (sym, per) => {
     setError(null);
@@ -39,6 +42,59 @@ const Dashboard = () => {
       fetchAllData(symbol, period);
     }
   }, [symbol, period, fetchAllData]);
+
+  // Real-time polling: update comparison data every 30s
+  useEffect(() => {
+    if (!symbol) return;
+
+    const pollData = async () => {
+      try {
+        const compData = await apiFetchComparisonData(symbol, period);
+        setComparisonData(compData);
+      } catch {
+        // Silent fail on poll
+      }
+    };
+
+    setIsPolling(true);
+    pollingRef.current = setInterval(pollData, 30000);
+
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+      setIsPolling(false);
+    };
+  }, [symbol, period]);
+
+  // Check if symbol is in watchlist
+  useEffect(() => {
+    const checkWatchlist = async () => {
+      try {
+        const data = await fetchWatchlist();
+        const symbols = data.watchlist.map(w => w.symbol);
+        setIsWatchlisted(symbols.includes(symbol));
+      } catch {
+        // Ignore
+      }
+    };
+    if (symbol) checkWatchlist();
+  }, [symbol]);
+
+  const handleWatchlistToggle = async () => {
+    try {
+      if (isWatchlisted) {
+        await removeFromWatchlist(symbol);
+        setIsWatchlisted(false);
+      } else {
+        await addToWatchlist(symbol);
+        setIsWatchlisted(true);
+      }
+    } catch {
+      // Ignore
+    }
+  };
 
   useEffect(() => {
     if (chartInstance.current) {
@@ -228,9 +284,43 @@ const Dashboard = () => {
         <>
           <main className="main-content">
             <div className="stock-header">
-              <h1 className="stock-name">{dashboardData.longName}({symbol})</h1>
+              <div>
+                <h1 className="stock-name">{dashboardData.longName}({symbol})</h1>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '0.5rem' }}>
+                  <button
+                    onClick={handleWatchlistToggle}
+                    style={{
+                      padding: '0.35rem 0.75rem',
+                      borderRadius: 'var(--radius-sm)',
+                      border: `1px solid ${isWatchlisted ? 'var(--color-warning)' : 'var(--border-color)'}`,
+                      background: isWatchlisted ? 'var(--color-warning-bg)' : 'var(--bg-input)',
+                      color: isWatchlisted ? 'var(--color-warning)' : 'var(--text-secondary)',
+                      cursor: 'pointer',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      fontFamily: 'Inter, sans-serif',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {isWatchlisted ? '★ Watchlisted' : '☆ Add to Watchlist'}
+                  </button>
+                  {isPolling && (
+                    <span style={{
+                      padding: '0.25rem 0.6rem',
+                      borderRadius: 'var(--radius-sm)',
+                      background: 'var(--color-success-bg)',
+                      color: 'var(--color-success)',
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      border: '1px solid rgba(0,214,143,0.3)',
+                      letterSpacing: '0.5px',
+                    }}>
+                      ● LIVE
+                    </span>
+                  )}
+                </div>
+              </div>
               <div className="price-info">
-                {/* Show the last price in the period from comparisonData if available */}
                 <div className="current-price">
                   {comparisonData && typeof comparisonData.end_price === 'number'
                     ? `$${comparisonData.end_price}`
