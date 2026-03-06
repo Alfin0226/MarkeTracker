@@ -1,5 +1,5 @@
 from database import db
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Sequence, event
 from sqlalchemy.sql import text
 
@@ -14,7 +14,7 @@ class User(db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     password = db.Column(db.LargeBinary, nullable=False)
     virtual_balance = db.Column(db.Float, default=1000000.0)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
 class Portfolio(db.Model):
     __tablename__ = 'portfolio'
@@ -45,7 +45,7 @@ class Transaction(db.Model):
     shares = db.Column(db.Integer, nullable=False)
     price = db.Column(db.Float, nullable=False)
     action = db.Column(db.String(4), nullable=False)  # 'buy' or 'sell'
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    timestamp = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
 @event.listens_for(Transaction.__table__, 'after_create')
 def create_transaction_sequence(target, connection, **kw):
