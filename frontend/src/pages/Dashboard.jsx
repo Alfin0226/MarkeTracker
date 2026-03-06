@@ -16,6 +16,7 @@ const Dashboard = () => {
   const [suggestions, setSuggestions] = useState([]);
   const chartRef = useRef(null);
   const chartInstance = useRef(null);
+  const searchTimerRef = useRef(null);
 
   const fetchAllData = useCallback(async (sym, per) => {
     setError(null);
@@ -30,7 +31,6 @@ const Dashboard = () => {
       setComparisonData(compData);
     } catch (err) {
       setError('Failed to load dashboard data. Please try again.');
-      console.error(err);
     }
   }, []);
 
@@ -117,7 +117,7 @@ const Dashboard = () => {
               borderColor: '#007bff',
               borderWidth: 1,
               callbacks: {
-                label: function(context) {
+                label: function (context) {
                   if (!showSP500) {
                     return `Price: $${context.parsed.y}`;
                   }
@@ -127,7 +127,7 @@ const Dashboard = () => {
             }
           },
           scales: {
-            x: { grid: { display: true, color: 'rgba(0, 0, 0, 0.1)' }},
+            x: { grid: { display: true, color: 'rgba(0, 0, 0, 0.1)' } },
             y: {
               beginAtZero: false,
               grid: { display: true, color: 'rgba(0, 0, 0, 0.1)' },
@@ -152,16 +152,25 @@ const Dashboard = () => {
     };
   }, [comparisonData, showSP500]);
 
-  const handleSearchChange = async (e) => {
+  const handleSearchChange = (e) => {
     const val = e.target.value.toUpperCase();
     setSearch(val);
+
+    // Clear any pending search timer
+    if (searchTimerRef.current) {
+      clearTimeout(searchTimerRef.current);
+    }
+
     if (val.length > 1) {
-      try {
-        const data = await searchSymbols(val);
-        setSuggestions(data);
-      } catch (error) {
-        setSuggestions([]);
-      }
+      // Debounce: wait 300ms after last keystroke before firing API call
+      searchTimerRef.current = setTimeout(async () => {
+        try {
+          const data = await searchSymbols(val);
+          setSuggestions(data);
+        } catch {
+          setSuggestions([]);
+        }
+      }, 300);
     } else {
       setSuggestions([]);
     }
@@ -237,16 +246,16 @@ const Dashboard = () => {
                 <div className="chart-controls">
                   <div className="period-buttons">
                     {['1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', 'max'].map(p => (
-                      <button 
-                        key={p} 
-                        className={`period-btn ${period === p ? 'active' : ''}`} 
+                      <button
+                        key={p}
+                        className={`period-btn ${period === p ? 'active' : ''}`}
                         onClick={() => handlePeriodChange(p)}
                       >
                         {p.toUpperCase()}
                       </button>
                     ))}
                   </div>
-                  <button 
+                  <button
                     className={`toggle-btn ${showSP500 ? 'active' : ''}`}
                     onClick={() => setShowSP500(!showSP500)}
                   >
@@ -254,8 +263,8 @@ const Dashboard = () => {
                   </button>
                 </div>
               </div>
-              <div style={{ 
-                height: '400px', 
+              <div style={{
+                height: '400px',
                 margin: '0 auto'  // Center the chart with equal margins on both sides
               }}>
                 <canvas ref={chartRef}></canvas>
@@ -286,7 +295,7 @@ const Dashboard = () => {
                 </div>
               </div>
 
-            <h3 className="section-title">Business Summary</h3>
+              <h3 className="section-title">Business Summary</h3>
               <div className="business-summary">
                 <p>{dashboardData.longBusinessSummary || 'No summary available.'}</p>
               </div>

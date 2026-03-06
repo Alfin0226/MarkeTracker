@@ -1,37 +1,32 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { login } from '../utils/api';
+import { login as apiLogin } from '../utils/api';
+import { useAuth } from '../context/AuthContext';
 
 function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const navigate = useNavigate();
-
-  useEffect(() => {
-    localStorage.removeItem('token');
-  }, []);
+  const auth = useAuth();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     try {
-      const response = await login({ email, password });
-      console.log('Login response:', response);
-      
+      const response = await apiLogin({ email, password });
+
       // Check for either token format
       const token = response.token || response.access_token;
       if (token) {
-        localStorage.setItem('token', token);
+        auth.login(token, response.user);
         navigate('/portfolio');
       } else {
         setError('Invalid server response');
-        console.error('No token in response:', response);
       }
     } catch (err) {
       const errorMessage = err.response?.data?.error || 'Invalid credentials';
       setError(errorMessage);
-      console.error('Login error:', err.response?.data || err);
     }
   };
 

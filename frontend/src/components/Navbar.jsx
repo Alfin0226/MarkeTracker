@@ -1,12 +1,13 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 function Navbar() {
   const navigate = useNavigate();
-  const token = localStorage.getItem('token');
+  const { isAuthenticated, logout } = useAuth();
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
+    logout();
     navigate('/login');
   };
 
@@ -17,7 +18,7 @@ function Navbar() {
           MarkeTracker ( Home Page )
         </Link>
         <div className="navbar-nav">
-          {token ? (
+          {isAuthenticated ? (
             <>
               <Link className="nav-link" to="/dashboard">
                 Stock Dashboard

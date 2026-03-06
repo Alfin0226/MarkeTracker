@@ -10,7 +10,7 @@ function TradeForm({ onTradeComplete }) {
   const handleTrade = async (e) => {
     e.preventDefault();
     setTradeError('');
-    
+
     try {
       if (!tradeSymbol || !tradeShares || tradeShares <= 0) {
         setTradeError('Please enter valid symbol and number of shares');
@@ -22,29 +22,25 @@ function TradeForm({ onTradeComplete }) {
         shares: parseInt(tradeShares),
         action: tradeAction
       });
-      
-      console.log('Trade response:', response);
-      
+
       if (response.transaction) {
         setTradeSymbol('');
         setTradeShares('');
         const action = response.transaction.action || tradeAction;
         const message = `${action.toUpperCase()}: ${response.transaction.shares} shares of ${response.transaction.symbol} at $${response.transaction.price.toFixed(2)}\nNew Balance: $${response.transaction.new_balance.toFixed(2)}`;
         alert('Trade executed successfully!\n' + message);
-        
+
         if (onTradeComplete) {
           onTradeComplete();
         }
       } else {
         setTradeError('Invalid response from server');
-        console.error('Invalid trade response:', response);
       }
     } catch (error) {
-      console.error('Trade error:', error);
-      const errorMessage = error.response?.data?.error || 
-                         (error.response?.data?.details) ||
-                         error.message ||
-                         'An unexpected error occurred while executing the trade';
+      const errorMessage = error.response?.data?.error ||
+        (error.response?.data?.details) ||
+        error.message ||
+        'An unexpected error occurred while executing the trade';
       setTradeError(errorMessage);
     }
   };

@@ -458,24 +458,39 @@ def testingbackend():
 # Set this to your deployed backend-datahandle URL
 DATAHANDLE_URL = os.getenv('DATAHANDLE_URL')
 
+import time
+
+def retry_request(url, params=None, max_retries=3, timeout=10):
+    """Make a GET request with retry logic and exponential backoff."""
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            response = requests.get(url, params=params, timeout=timeout)
+            return response.json(), response.status_code
+        except requests.exceptions.Timeout:
+            last_error = "Request timed out"
+            logger.warning(f"Datahandle request timed out (attempt {attempt + 1}/{max_retries}): {url}")
+        except requests.exceptions.ConnectionError:
+            last_error = "Could not connect to data service"
+            logger.warning(f"Datahandle connection error (attempt {attempt + 1}/{max_retries}): {url}")
+        except Exception as e:
+            last_error = str(e)
+            logger.error(f"Datahandle unexpected error (attempt {attempt + 1}/{max_retries}): {e}")
+        
+        # Exponential backoff: 1s, 2s between retries
+        if attempt < max_retries - 1:
+            time.sleep(2 ** attempt)
+    
+    return {"error": f"Data service unavailable: {last_error}"}, 503
+
 def get_comparison_data(symbol, period="1y"):
     url = f"{DATAHANDLE_URL}/api/comparison/{symbol}"
     params = {"period": period}
-    try:
-        response = requests.get(url, params=params, timeout=10)
-        return response.json(), response.status_code
-    except Exception as e:
-        logger.error(f"Error contacting datahandle service: {e}")
-        return {"error": "Data service unavailable"}, 503
+    return retry_request(url, params=params)
     
 def get_dashboard_data(symbol):
     url = f"{DATAHANDLE_URL}/api/dashboard/{symbol}"
-    try:
-        response = requests.get(url, timeout=10)
-        return response.json(), response.status_code
-    except Exception as e:
-        logger.error(f"Error contacting datahandle service: {e}")
-        return {"error": "Data service unavailable"}, 503
+    return retry_request(url)
 
 @app.route('/api/comparison/<symbol>', methods=['GET'])
 def proxy_comparison(symbol):

@@ -15,10 +15,8 @@ function Portfolio() {
     setError(null);
     try {
       const data = await fetchPortfolio();
-      console.log('Portfolio data received:', data);
       setPortfolio(data);
     } catch (error) {
-      console.error('Portfolio error:', error);
       setError(error.message || 'Failed to load portfolio');
     } finally {
       setLoading(false);
@@ -56,15 +54,15 @@ function Portfolio() {
   return (
     <div className="container mt-5">
       <h2>Portfolio</h2>
-      
+
       <div className="row mb-4">
         <div className="col">
-          <PortfolioSummary 
+          <PortfolioSummary
             portfolio={{
               total_value: portfolio.total_value || 0,
               cash_balance: portfolio.cash_balance || 0
-            }} 
-            initialInvestment={initialInvestment} 
+            }}
+            initialInvestment={initialInvestment}
           />
         </div>
       </div>
@@ -82,8 +80,8 @@ function Portfolio() {
         </div>
       </div>
 
-      <button 
-        className="btn btn-secondary mt-3" 
+      <button
+        className="btn btn-secondary mt-3"
         onClick={loadPortfolio}
       >
         Refresh Portfolio

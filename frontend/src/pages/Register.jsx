@@ -13,17 +13,14 @@ function Register() {
     setError('');
     try {
       await register({ email, password });
-      // On successful registration, navigate to login
       navigate('/login');
     } catch (err) {
-      // On error, stay on registration page and show error
       const errorMessage = err.response?.data?.error || 'Registration failed. Please try again.';
-      setError(errorMessage);
-      console.error('Registration error:', err.response?.data || err);
-      
-      // If email exists, suggest logging in
+
       if (errorMessage === 'Email already exists') {
         setError('This email is already registered. Please try logging in instead.');
+      } else {
+        setError(errorMessage);
       }
     }
   };
@@ -36,8 +33,8 @@ function Register() {
           {error}
           {error.includes('already registered') && (
             <div className="mt-2">
-              <button 
-                className="btn btn-link p-0" 
+              <button
+                className="btn btn-link p-0"
                 onClick={() => navigate('/login')}
               >
                 Go to Login

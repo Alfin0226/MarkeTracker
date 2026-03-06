@@ -22,14 +22,14 @@ function StockTracker() {
 
   const loadStockData = async () => {
     if (!symbol) return;
-    
+
     setLoading(true);
     try {
       const { period: p, interval } = periodMap[period];
       const data = await fetchStockData(symbol, p, interval);
       setStockData(data);
     } catch (error) {
-      console.error('Error fetching stock data:', error);
+      // Error handled silently
     }
     setLoading(false);
   };
@@ -52,7 +52,7 @@ function StockTracker() {
           onChange={(e) => setSymbol(e.target.value.toUpperCase())}
         />
       </div>
-      
+
       <div className="btn-group mb-3">
         {Object.keys(periodMap).map((p) => (
           <button
@@ -66,7 +66,7 @@ function StockTracker() {
       </div>
 
       {loading && <div>Loading...</div>}
-      
+
       {stockData && stockData.info && (
         <div>
           <div className="mb-3">
