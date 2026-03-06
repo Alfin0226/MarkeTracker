@@ -30,10 +30,6 @@ api.interceptors.response.use(
   }
 );
 
-export const fetchStockData = async (symbol, period, interval) => {
-  const response = await api.get(`/api/stock/${symbol}?period=${period}&interval=${interval}`);
-  return response.data;
-};
 
 export const fetchPortfolio = async () => {
   const response = await api.get('/api/portfolio');

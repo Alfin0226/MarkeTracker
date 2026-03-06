@@ -176,30 +176,6 @@ def wake_up_datahandle():
     except Exception as e:
         logger.warning(f"Could not wake datahandle service: {e}")
 
-@app.route('/api/stock/<symbol>', methods=['GET'])
-def get_stock_data(symbol):
-    try:
-        period = request.args.get('period', '1d')
-        interval = request.args.get('interval', '5m')
-        stock = yf.Ticker(symbol)
-        
-        # Get historical data with interval
-        hist = stock.history(period=period, interval=interval)
-        
-        if hist.empty:
-            return jsonify({'error': 'No data available for this period'}), 404
-        
-        # Format data for frontend
-        data = {
-            'prices': hist['Close'].tolist(),
-            'dates': hist.index.strftime('%Y-%m-%d %H:%M:%S').tolist(),
-            'info': stock.info
-        }
-        
-        return jsonify(data)
-    except Exception as e:
-        logger.error(f"Error fetching stock data for {symbol}: {str(e)}")
-        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/portfolio', methods=['GET'])
 @jwt_required()
@@ -451,9 +427,6 @@ def test_auth():
         'user_id': user_id
     })
 
-@app.route("/testingbackend")
-def testingbackend():
-    return("<h1>Testing Backend</h1>")
 
 # Set this to your deployed backend-datahandle URL
 DATAHANDLE_URL = os.getenv('DATAHANDLE_URL')

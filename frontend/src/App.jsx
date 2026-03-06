@@ -3,7 +3,6 @@ import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Login from './pages/Login';
 import Register from './pages/Register';
-import StockTracker from './pages/StockTracker';
 import Portfolio from './pages/Portfolio';
 import TransactionHistory from './pages/TransactionHistory';
 import Watchlist from './pages/Watchlist';
@@ -57,7 +56,6 @@ function App() {
             />
             <Route path="/" element={<LandingPage />} />
             <Route path="/dashboard" element={<LandingSearchPage />} />
-            <Route path="/stocks" element={<StockTracker />} />
           </Routes>
         </ErrorBoundary>
       </div>
