@@ -14,11 +14,6 @@ import LandingSearchPage from './pages/LandingSearchPage';
 import Dashboard from './pages/Dashboard';
 
 function App() {
-  useEffect(() => {
-    // Clear any existing tokens on app start
-    localStorage.removeItem('token');
-  }, []);
-
   return ( <>
     <Router>
       <div className="App">
