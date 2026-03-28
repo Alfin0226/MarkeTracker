@@ -3,47 +3,70 @@ import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Login from './pages/Login';
 import Register from './pages/Register';
-import StockTracker from './pages/StockTracker';
 import Portfolio from './pages/Portfolio';
+import TransactionHistory from './pages/TransactionHistory';
+import Watchlist from './pages/Watchlist';
 import PrivateRoute from './components/PrivateRoute';
-import {Analytics} from '@vercel/analytics/react';
+import ErrorBoundary from './components/ErrorBoundary';
+import { Analytics } from '@vercel/analytics/react';
 import LandingPage from './pages/LandingPage';
 import LandingSearchPage from './pages/LandingSearchPage';
 import Dashboard from './pages/Dashboard';
 
 function App() {
+  useEffect(() => {
+    // Clear any existing tokens on app start
+    localStorage.removeItem('token');
+  }, []);
 
   return ( <>
     <Router>
       <div className="App">
         <Navbar />
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route
-            path="/dashboard/:symbol"
-            element={
-              <PrivateRoute>
-                <Dashboard />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/portfolio"
-            element={
-              <PrivateRoute>
-                <Portfolio />
-              </PrivateRoute>
-            }
-          />
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/dashboard" element={<LandingSearchPage />} />
-          <Route path="/stocks" element={<StockTracker />} />
-        </Routes>
+        <ErrorBoundary>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route
+              path="/dashboard/:symbol"
+              element={
+                <PrivateRoute>
+                  <Dashboard />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/portfolio"
+              element={
+                <PrivateRoute>
+                  <Portfolio />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/transactions"
+              element={
+                <PrivateRoute>
+                  <TransactionHistory />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/watchlist"
+              element={
+                <PrivateRoute>
+                  <Watchlist />
+                </PrivateRoute>
+              }
+            />
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/dashboard" element={<LandingSearchPage />} />
+          </Routes>
+        </ErrorBoundary>
       </div>
     </Router>
     <Analytics />
-    </>
+  </>
   );
 }
 

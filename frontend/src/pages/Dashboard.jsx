@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import Chart from 'chart.js/auto';
 import '../styles/Dashboard.css';
 import { useParams, useNavigate } from 'react-router-dom';
-import { fetchDashboardData as apiFetchDashboardData, fetchComparisonData as apiFetchComparisonData, searchSymbols } from '../utils/api';
+import { fetchDashboardData as apiFetchDashboardData, fetchComparisonData as apiFetchComparisonData, searchSymbols, addToWatchlist, removeFromWatchlist, fetchWatchlist } from '../utils/api';
 
 const Dashboard = () => {
   const { symbol } = useParams();
@@ -16,6 +16,10 @@ const Dashboard = () => {
   const [suggestions, setSuggestions] = useState([]);
   const chartRef = useRef(null);
   const chartInstance = useRef(null);
+  const searchTimerRef = useRef(null);
+  const pollingRef = useRef(null);
+  const [isPolling, setIsPolling] = useState(false);
+  const [isWatchlisted, setIsWatchlisted] = useState(false);
 
   const fetchAllData = useCallback(async (sym, per) => {
     setError(null);
@@ -30,7 +34,6 @@ const Dashboard = () => {
       setComparisonData(compData);
     } catch (err) {
       setError('Failed to load dashboard data. Please try again.');
-      console.error(err);
     }
   }, []);
 
@@ -39,6 +42,59 @@ const Dashboard = () => {
       fetchAllData(symbol, period);
     }
   }, [symbol, period, fetchAllData]);
+
+  // Real-time polling: update comparison data every 30s
+  useEffect(() => {
+    if (!symbol) return;
+
+    const pollData = async () => {
+      try {
+        const compData = await apiFetchComparisonData(symbol, period);
+        setComparisonData(compData);
+      } catch {
+        // Silent fail on poll
+      }
+    };
+
+    setIsPolling(true);
+    pollingRef.current = setInterval(pollData, 30000);
+
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+      setIsPolling(false);
+    };
+  }, [symbol, period]);
+
+  // Check if symbol is in watchlist
+  useEffect(() => {
+    const checkWatchlist = async () => {
+      try {
+        const data = await fetchWatchlist();
+        const symbols = data.watchlist.map(w => w.symbol);
+        setIsWatchlisted(symbols.includes(symbol));
+      } catch {
+        // Ignore
+      }
+    };
+    if (symbol) checkWatchlist();
+  }, [symbol]);
+
+  const handleWatchlistToggle = async () => {
+    try {
+      if (isWatchlisted) {
+        await removeFromWatchlist(symbol);
+        setIsWatchlisted(false);
+      } else {
+        await addToWatchlist(symbol);
+        setIsWatchlisted(true);
+      }
+    } catch {
+      // Ignore
+    }
+  };
 
   useEffect(() => {
     if (chartInstance.current) {
@@ -117,7 +173,7 @@ const Dashboard = () => {
               borderColor: '#007bff',
               borderWidth: 1,
               callbacks: {
-                label: function(context) {
+                label: function (context) {
                   if (!showSP500) {
                     return `Price: $${context.parsed.y}`;
                   }
@@ -127,7 +183,7 @@ const Dashboard = () => {
             }
           },
           scales: {
-            x: { grid: { display: true, color: 'rgba(0, 0, 0, 0.1)' }},
+            x: { grid: { display: true, color: 'rgba(0, 0, 0, 0.1)' } },
             y: {
               beginAtZero: false,
               grid: { display: true, color: 'rgba(0, 0, 0, 0.1)' },
@@ -152,16 +208,25 @@ const Dashboard = () => {
     };
   }, [comparisonData, showSP500]);
 
-  const handleSearchChange = async (e) => {
+  const handleSearchChange = (e) => {
     const val = e.target.value.toUpperCase();
     setSearch(val);
+
+    // Clear any pending search timer
+    if (searchTimerRef.current) {
+      clearTimeout(searchTimerRef.current);
+    }
+
     if (val.length > 1) {
-      try {
-        const data = await searchSymbols(val);
-        setSuggestions(data);
-      } catch (error) {
-        setSuggestions([]);
-      }
+      // Debounce: wait 300ms after last keystroke before firing API call
+      searchTimerRef.current = setTimeout(async () => {
+        try {
+          const data = await searchSymbols(val);
+          setSuggestions(data);
+        } catch {
+          setSuggestions([]);
+        }
+      }, 300);
     } else {
       setSuggestions([]);
     }
@@ -219,9 +284,43 @@ const Dashboard = () => {
         <>
           <main className="main-content">
             <div className="stock-header">
-              <h1 className="stock-name">{dashboardData.longName}({symbol})</h1>
+              <div>
+                <h1 className="stock-name">{dashboardData.longName}({symbol})</h1>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '0.5rem' }}>
+                  <button
+                    onClick={handleWatchlistToggle}
+                    style={{
+                      padding: '0.35rem 0.75rem',
+                      borderRadius: 'var(--radius-sm)',
+                      border: `1px solid ${isWatchlisted ? 'var(--color-warning)' : 'var(--border-color)'}`,
+                      background: isWatchlisted ? 'var(--color-warning-bg)' : 'var(--bg-input)',
+                      color: isWatchlisted ? 'var(--color-warning)' : 'var(--text-secondary)',
+                      cursor: 'pointer',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      fontFamily: 'Inter, sans-serif',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {isWatchlisted ? '★ Watchlisted' : '☆ Add to Watchlist'}
+                  </button>
+                  {isPolling && (
+                    <span style={{
+                      padding: '0.25rem 0.6rem',
+                      borderRadius: 'var(--radius-sm)',
+                      background: 'var(--color-success-bg)',
+                      color: 'var(--color-success)',
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      border: '1px solid rgba(0,214,143,0.3)',
+                      letterSpacing: '0.5px',
+                    }}>
+                      ● LIVE
+                    </span>
+                  )}
+                </div>
+              </div>
               <div className="price-info">
-                {/* Show the last price in the period from comparisonData if available */}
                 <div className="current-price">
                   {comparisonData && typeof comparisonData.end_price === 'number'
                     ? `$${comparisonData.end_price}`
@@ -237,16 +336,16 @@ const Dashboard = () => {
                 <div className="chart-controls">
                   <div className="period-buttons">
                     {['1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', 'max'].map(p => (
-                      <button 
-                        key={p} 
-                        className={`period-btn ${period === p ? 'active' : ''}`} 
+                      <button
+                        key={p}
+                        className={`period-btn ${period === p ? 'active' : ''}`}
                         onClick={() => handlePeriodChange(p)}
                       >
                         {p.toUpperCase()}
                       </button>
                     ))}
                   </div>
-                  <button 
+                  <button
                     className={`toggle-btn ${showSP500 ? 'active' : ''}`}
                     onClick={() => setShowSP500(!showSP500)}
                   >
@@ -254,8 +353,8 @@ const Dashboard = () => {
                   </button>
                 </div>
               </div>
-              <div style={{ 
-                height: '400px', 
+              <div style={{
+                height: '400px',
                 margin: '0 auto'  // Center the chart with equal margins on both sides
               }}>
                 <canvas ref={chartRef}></canvas>
@@ -286,7 +385,7 @@ const Dashboard = () => {
                 </div>
               </div>
 
-            <h3 className="section-title">Business Summary</h3>
+              <h3 className="section-title">Business Summary</h3>
               <div className="business-summary">
                 <p>{dashboardData.longBusinessSummary || 'No summary available.'}</p>
               </div>

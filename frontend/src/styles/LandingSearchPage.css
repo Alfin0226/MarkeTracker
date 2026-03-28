@@ -1,71 +1,117 @@
+/* ===========================
+   LANDING SEARCH PAGE
+   =========================== */
+
 .landing-search-container {
-  min-height: 100vh;
+  min-height: calc(100vh - 60px);
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(to bottom, #f8fafc 0%, #e3eefa 100%);
+  background: var(--bg-primary);
+  padding: 2rem;
 }
 
 .landing-search-card {
-  background: #fff;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
   padding: 3.5rem 2.5rem;
-  border-radius: 28px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+  border-radius: var(--radius-xl);
   text-align: center;
   max-width: 520px;
   width: 100%;
+  box-shadow: var(--shadow-lg);
+}
+
+.landing-search-card h1 {
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin-bottom: 0.3rem;
+  color: var(--text-heading);
+}
+
+.landing-search-card p {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
 }
 
 .landing-search-input {
   width: 90%;
-  padding: 1.1rem;
+  padding: 1rem;
   margin-top: 1.5rem;
-  border-radius: 10px;
-  border: 1.5px solid #b0b8c1;
-  font-size: 1.15rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 1rem;
+  transition: border-color var(--transition-fast);
+}
+
+.landing-search-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.2);
+}
+
+.landing-search-input::placeholder {
+  color: var(--text-muted);
 }
 
 .landing-search-btn {
   margin-top: 1.5rem;
-  padding: 0.95rem 2.5rem;
+  padding: 0.85rem 2.5rem;
   border: none;
-  border-radius: 10px;
-  background: #007bff;
+  border-radius: var(--radius-sm);
+  background: var(--gradient-primary);
   color: #fff;
-  font-size: 1.15rem;
+  font-size: 1rem;
   cursor: pointer;
   font-weight: 600;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.07);
-  transition: background 0.2s;
-}
-.landing-search-btn:hover {
-  background: #0056b3;
+  transition: all var(--transition-normal);
+  box-shadow: var(--shadow-sm);
 }
 
-.suggestions-list {
+.landing-search-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-glow);
+  filter: brightness(1.1);
+}
+
+.landing-search-container .suggestions-list {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
   width: 90%;
-  background: #fff;
-  border: 1px solid #ddd;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
   border-top: none;
-  border-radius: 0 0 10px 10px;
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
   list-style: none;
   margin: 0;
   padding: 0;
   z-index: 1000;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.13);
+  box-shadow: var(--shadow-md);
   max-height: 220px;
   overflow-y: auto;
 }
 
-.suggestions-list li {
-  padding: 1em 1.2em;
+.landing-search-container .suggestions-list li {
+  padding: 0.85rem 1.2rem;
   cursor: pointer;
-  font-size: 1.08em;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+  transition: background-color var(--transition-fast);
 }
 
-.suggestions-list li:hover {
-  background-color: #f0f4fa;
+.landing-search-container .suggestions-list li:hover {
+  background-color: var(--bg-card-hover);
+}
+
+.landing-search-container .suggestions-list li strong {
+  color: var(--accent-primary);
+}
+
+@media (max-width: 480px) {
+  .landing-search-card {
+    padding: 2rem 1.5rem;
+  }
 }

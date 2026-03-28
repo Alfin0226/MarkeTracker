@@ -10,31 +10,19 @@ const api = axios.create({
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
-  console.log('Request URL:', config.url);
-  console.log('Token present:', !!token);
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
-    console.log('Authorization header set:', config.headers.Authorization);
   }
   return config;
 }, (error) => {
-  console.error('Request interceptor error:', error);
   return Promise.reject(error);
 });
 
-// Add response interceptor to handle token expiration and invalid tokens
+// Handle token expiration and invalid tokens
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    console.error('API Error:', {
-      status: error.response?.status,
-      data: error.response?.data,
-      config: error.config
-    });
-    
     if (error.response?.status === 422) {
-      console.log('Token error:', error.response?.data);
-      // Clear token and redirect to login for any token-related errors
       localStorage.removeItem('token');
       window.location.href = '/login';
     }
@@ -42,92 +30,79 @@ api.interceptors.response.use(
   }
 );
 
-export const fetchStockData = async (symbol, period, interval) => {
-  try {
-    const response = await api.get(`/api/stock/${symbol}?period=${period}&interval=${interval}`);
-    return response.data;
-  } catch (error) {
-    throw error;
-  }
-};
 
 export const fetchPortfolio = async () => {
-  try {
-    const response = await api.get('/api/portfolio');
-    console.log('Portfolio API response:', response.data);
-    return response.data;
-  } catch (error) {
-    console.error('Portfolio API error:', error.response?.data || error);
-    throw error;
-  }
+  const response = await api.get('/api/portfolio');
+  return response.data;
 };
 
 export const executeTrade = async (tradeData) => {
-  try {
-    const response = await api.post('/api/trade', tradeData);
-    return response.data;
-  } catch (error) {
-    console.error('Trade error:', error.response?.data || error);
-    throw error;
-  }
+  const response = await api.post('/api/trade', tradeData);
+  return response.data;
 };
 
 export const fetchDashboardData = async (symbol) => {
-  try {
-    const response = await api.get(`/api/dashboard/${symbol}`);
-    return response.data;
-  } catch (error) {
-    console.error('Dashboard data API error:', error.response?.data || error);
-    throw error;
-  }
+  const response = await api.get(`/api/dashboard/${symbol}`);
+  return response.data;
 };
 
 export const fetchComparisonData = async (symbol, period) => {
-  try {
-    const response = await api.get(`/api/comparison/${symbol}?period=${period}`);
-    return response.data;
-  } catch (error) {
-    console.error('Comparison data API error:', error.response?.data || error);
-    throw error;
-  }
+  const response = await api.get(`/api/comparison/${symbol}?period=${period}`);
+  return response.data;
 };
 
 export const searchSymbols = async (query) => {
-  try {
-    const response = await api.get(`/api/search?q=${query}`);
-    return response.data;
-  } catch (error) {
-    console.error('Search API error:', error.response?.data || error);
-    throw error;
-  }
+  const response = await api.get(`/api/search?q=${query}`);
+  return response.data;
 };
 
 export const login = async (credentials) => {
-  try {
-    console.log('Attempting login with:', credentials.email);
-    const response = await api.post('/api/login', credentials);
-    console.log('Login response:', response.data);
-    
-    // Handle both token and access_token formats
-    const token = response.data.token || response.data.access_token;
-    if (token) {
-      localStorage.setItem('token', token);
-      console.log('Token stored successfully');
-    } else {
-      console.error('No token in response:', response.data);
-    }
-    return response.data;
-  } catch (error) {
-    console.error('Login error:', error.response?.data || error);
-    throw error;
+  const response = await api.post('/api/login', credentials);
+  const token = response.data.token || response.data.access_token;
+  if (token) {
+    localStorage.setItem('token', token);
   }
+  return response.data;
 };
 
 export const register = async (userData) => {
-  try {
-    const response = await api.post('/api/register', userData);
-    return response.data;
-  } catch (error) {
-    throw error;
-  }
+  const response = await api.post('/api/register', userData);
+  return response.data;
+};
+
+// ===========================
+// TRANSACTION HISTORY
+// ===========================
+
+export const fetchTransactions = async (page = 1, perPage = 50) => {
+  const response = await api.get(`/api/transactions?page=${page}&per_page=${perPage}`);
+  return response.data;
+};
+
+// ===========================
+// WATCHLIST
+// ===========================
+
+export const fetchWatchlist = async () => {
+  const response = await api.get('/api/watchlist');
+  return response.data;
+};
+
+export const addToWatchlist = async (symbol) => {
+  const response = await api.post('/api/watchlist', { symbol });
+  return response.data;
+};
+
+export const removeFromWatchlist = async (symbol) => {
+  const response = await api.delete(`/api/watchlist/${symbol}`);
+  return response.data;
+};
+
+// ===========================
+// PORTFOLIO HISTORY
+// ===========================
+
+export const fetchPortfolioHistory = async () => {
+  const response = await api.get('/api/portfolio/history');
+  return response.data;
 };

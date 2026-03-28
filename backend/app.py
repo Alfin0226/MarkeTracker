@@ -5,12 +5,18 @@ import yfinance as yf
 from datetime import datetime, timedelta, timezone
 import bcrypt
 from database import db
-from models import User, Portfolio, Transaction, Company
+from models import User, Portfolio, Transaction, Company, Watchlist
 from sqlalchemy import or_, case
 import os
 from dotenv import load_dotenv
 import requests
+import logging
+
 load_dotenv()
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
@@ -38,18 +44,12 @@ CORS(app, resources={
 })
 
 # Configuration
-print("Starting application configuration...")
 database_url = os.getenv('POSTGRES_URL')
-print(f"POSTGRES_URL: {'set' if database_url else 'not set'}")
 
 if not database_url:
-    # Fallback to DATABASE_URI if POSTGRES_URL is not set
     database_url = os.getenv('DATABASE_URI')
-    print(f"DATABASE_URI: {'set' if database_url else 'not set'}")
     if not database_url:
         raise RuntimeError('No database connection string found. Set either POSTGRES_URL or DATABASE_URI environment variable')
-
-print(f"Database URL (masked): {database_url[:15]}...{database_url[-15:]}")
 
 # Update database URL format
 if database_url.startswith('postgres://'):
@@ -79,27 +79,24 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = engine_options
 
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY')
-print(f"JWT_SECRET_KEY: {'set' if app.config['JWT_SECRET_KEY'] else 'not set'}")
 
 if not app.config['JWT_SECRET_KEY']:
     raise RuntimeError('JWT_SECRET_KEY environment variable is not set')
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(minutes=30)
 
-print("Initializing database...")
 # Initialize extensions
 db.init_app(app)
 jwt = JWTManager(app)
 
 # Create database tables within the application context.
-# This is the recommended way to ensure tables are created correctly
-# without causing startup issues.
 with app.app_context():
     db.create_all()
 
-# Add JWT error handlers
+logger.info("Application initialized successfully")
+
+# JWT error handlers
 @jwt.invalid_token_loader
 def invalid_token_callback(error):
-    print(f"Invalid token error: {error}")
     return jsonify({
         'error': 'Invalid token',
         'message': str(error)
@@ -107,7 +104,6 @@ def invalid_token_callback(error):
 
 @jwt.expired_token_loader
 def expired_token_callback(jwt_header, jwt_payload):
-    print(f"Expired token. Header: {jwt_header}, Payload: {jwt_payload}")
     return jsonify({
         'error': 'Token has expired',
         'message': 'Please log in again'
@@ -115,7 +111,6 @@ def expired_token_callback(jwt_header, jwt_payload):
 
 @jwt.unauthorized_loader
 def unauthorized_callback(error):
-    print(f"Missing token error: {error}")
     return jsonify({
         'error': 'Missing token',
         'message': str(error)
@@ -123,16 +118,12 @@ def unauthorized_callback(error):
 
 @app.route('/api/register', methods=['POST'])
 def register():
-    print("Received registration request")
     data = request.get_json()
-    print("Request data:", data)
     
     if not data or 'email' not in data or 'password' not in data:
-        print("Missing email or password in request")
         return jsonify({'error': 'Email and password are required'}), 400
     
     if User.query.filter_by(email=data['email']).first():
-        print(f"Email {data['email']} already exists")
         return jsonify({'error': 'Email already exists'}), 400
     
     try:
@@ -146,28 +137,23 @@ def register():
         
         db.session.add(new_user)
         db.session.commit()
-        print(f"Successfully created user with email {data['email']}")
         return jsonify({'message': 'User created successfully'}), 201
     except Exception as e:
-        print(f"Error creating user: {str(e)}")
+        logger.error(f"Error creating user: {str(e)}")
         db.session.rollback()
         return jsonify({'error': 'Failed to create user'}), 500
 
 @app.route('/api/login', methods=['POST'])
 def login():
     data = request.get_json()
-    print(f"Login attempt for email: {data.get('email')}")
     
     user = User.query.filter_by(email=data['email']).first()
-    print(f"User found: {user is not None}")
     
     if user:
         try:
             password_matches = bcrypt.checkpw(data['password'].encode('utf-8'), user.password)
-            print(f"Password match: {password_matches}")
-            
         except Exception as e:
-            print(f"Error checking password: {str(e)}")
+            logger.error(f"Error checking password: {str(e)}")
             return jsonify({'error': 'Server error during login'}), 500
             
         if password_matches:
@@ -187,73 +173,33 @@ def wake_up_datahandle():
     try:
         if DATAHANDLE_URL:
             requests.get(f"{DATAHANDLE_URL}/wakeup", timeout=5)
-            print("requested datahandle wakeup")
-        else:
-            print("DATAHANDLE_URL not set, skipping wakeup request")
     except Exception as e:
-        print(f"Error waking up datahandle service: {e}")
+        logger.warning(f"Could not wake datahandle service: {e}")
 
-@app.route('/api/stock/<symbol>', methods=['GET'])
-def get_stock_data(symbol):
-    try:
-        period = request.args.get('period', '1d')
-        interval = request.args.get('interval', '5m')
-        stock = yf.Ticker(symbol)
-        
-        # Get historical data with interval
-        hist = stock.history(period=period, interval=interval)
-        
-        if hist.empty:
-            return jsonify({'error': 'No data available for this period'}), 404
-        
-        # Format data for frontend
-        data = {
-            'prices': hist['Close'].tolist(),
-            'dates': hist.index.strftime('%Y-%m-%d %H:%M:%S').tolist(),
-            'info': stock.info
-        }
-        
-        return jsonify(data)
-    except Exception as e:
-        print(f"Error fetching stock data: {str(e)}")
-        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/portfolio', methods=['GET'])
 @jwt_required()
 def get_portfolio():
     try:
-        # Get email from JWT token
         email = get_jwt_identity()
-        print(f"Getting portfolio for email: {email}")
         
-        # Find user by email
         user = User.query.filter_by(email=email).first()
         if not user:
-            print(f"No user found for email: {email}")
             return jsonify({'error': 'User not found'}), 404
-            
-        print(f"Found user ID: {user.id}")
         
-        # Get portfolio items
         portfolio_items = Portfolio.query.filter_by(user_id=user.id).all()
-        print(f"Found {len(portfolio_items)} portfolio items")
         
-        # Initialize response data
         portfolio_data = []
         total_value = user.virtual_balance
         
-        # Process each portfolio item
         for item in portfolio_items:
             try:
-                print(f"Processing {item.symbol}")
                 current_price = get_stock_price(item.symbol)
                 
-                # Calculate values
                 value = item.shares * current_price
                 total_value += value
                 gain_loss = value - (item.average_price * item.shares)
                 
-                # Add to portfolio data
                 portfolio_data.append({
                     'symbol': item.symbol,
                     'shares': item.shares,
@@ -262,11 +208,8 @@ def get_portfolio():
                     'value': float(value),
                     'gain_loss': float(gain_loss)
                 })
-                print(f"Added {item.symbol} to portfolio data")
                 
-            except ValueError as e:
-                print(f"Could not get price for {item.symbol}: {e}")
-                # Add to portfolio with unavailable price
+            except ValueError:
                 portfolio_data.append({
                     'symbol': item.symbol,
                     'shares': item.shares,
@@ -276,23 +219,19 @@ def get_portfolio():
                     'gain_loss': 'N/A'
                 })
             except Exception as e:
-                print(f"Error processing {item.symbol}: {str(e)}")
+                logger.error(f"Error processing portfolio item {item.symbol}: {str(e)}")
                 continue
         
-        # Prepare response
         response_data = {
             'portfolio': portfolio_data,
             'total_value': float(total_value),
             'cash_balance': float(user.virtual_balance)
         }
         
-        print("Final response data:", response_data)
         return jsonify(response_data)
         
     except Exception as e:
-        print(f"Portfolio error: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"Portfolio error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/search', methods=['GET'])
@@ -352,24 +291,17 @@ def get_stock_price(symbol):
         raise ValueError(f"Could not fetch price for {symbol} using any method")
         
     except Exception as e:
-        print(f"Error fetching price for {symbol}: {str(e)}")
         raise ValueError(f"Failed to fetch price for {symbol}: {str(e)}")
 
 @app.route('/api/trade', methods=['POST'])
 @jwt_required()
 def trade():
     try:
-        # Get email from JWT token
         email = get_jwt_identity()
-        print(f"Processing trade for email: {email}")
         
-        # Find user by email
         user = User.query.filter_by(email=email).first()
         if not user:
-            print(f"No user found for email: {email}")
             return jsonify({'error': 'User not found'}), 404
-            
-        print(f"Found user ID: {user.id}")
         
         data = request.get_json()
         if not data:
@@ -387,15 +319,12 @@ def trade():
         
         try:
             current_price = get_stock_price(data['symbol'])
-            print(f"Fetched price for {data['symbol']}: ${current_price}")
         except ValueError as e:
             return jsonify({'error': str(e)}), 400
-        except Exception as e:
-            print(f"Unexpected error fetching price: {str(e)}")
+        except Exception:
             return jsonify({'error': 'Failed to fetch stock price'}), 500
             
         total_cost = current_price * shares
-        print(f"Calculated total cost: ${total_cost}")
         
         # Start transaction
         db.session.begin_nested()
@@ -429,7 +358,6 @@ def trade():
                     db.session.add(portfolio_item)
                 
                 user.virtual_balance -= total_cost
-                print(f"Updated user balance: ${user.virtual_balance}")
                 
             elif data['action'] == 'sell':
                 portfolio_item = Portfolio.query.filter_by(
@@ -444,7 +372,6 @@ def trade():
                     return jsonify({'error': 'Not enough shares to sell'}), 400
                     
                 user.virtual_balance += total_cost
-                print(f"Updated user balance: ${user.virtual_balance}")
                 
                 if shares == portfolio_item.shares:
                     db.session.delete(portfolio_item)
@@ -465,7 +392,6 @@ def trade():
             
             try:
                 db.session.commit()
-                print(f"Transaction committed successfully. ID: {transaction.id}")
                 
                 return jsonify({
                     'message': f'Successfully executed {data["action"]} order',
@@ -480,16 +406,16 @@ def trade():
                 
             except Exception as e:
                 db.session.rollback()
-                print(f"Error committing transaction: {str(e)}")
+                logger.error(f"Error committing transaction: {str(e)}")
                 return jsonify({'error': 'Database error while executing trade'}), 500
                 
         except Exception as e:
             db.session.rollback()
-            print(f"Error during trade execution: {str(e)}")
+            logger.error(f"Error during trade execution: {str(e)}")
             return jsonify({'error': 'Failed to execute trade'}), 500
             
     except Exception as e:
-        print(f"Unexpected error in trade endpoint: {str(e)}")
+        logger.error(f"Unexpected error in trade endpoint: {str(e)}")
         return jsonify({'error': 'An unexpected error occurred'}), 500
 
 @app.route('/api/test-auth', methods=['GET'])
@@ -501,31 +427,43 @@ def test_auth():
         'user_id': user_id
     })
 
-@app.route("/testingbackend")
-def testingbackend():
-    return("<h1>Testing Backend</h1>")
 
 # Set this to your deployed backend-datahandle URL
 DATAHANDLE_URL = os.getenv('DATAHANDLE_URL')
 
+import time
+
+def retry_request(url, params=None, max_retries=3, timeout=10):
+    """Make a GET request with retry logic and exponential backoff."""
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            response = requests.get(url, params=params, timeout=timeout)
+            return response.json(), response.status_code
+        except requests.exceptions.Timeout:
+            last_error = "Request timed out"
+            logger.warning(f"Datahandle request timed out (attempt {attempt + 1}/{max_retries}): {url}")
+        except requests.exceptions.ConnectionError:
+            last_error = "Could not connect to data service"
+            logger.warning(f"Datahandle connection error (attempt {attempt + 1}/{max_retries}): {url}")
+        except Exception as e:
+            last_error = str(e)
+            logger.error(f"Datahandle unexpected error (attempt {attempt + 1}/{max_retries}): {e}")
+        
+        # Exponential backoff: 1s, 2s between retries
+        if attempt < max_retries - 1:
+            time.sleep(2 ** attempt)
+    
+    return {"error": f"Data service unavailable: {last_error}"}, 503
+
 def get_comparison_data(symbol, period="1y"):
     url = f"{DATAHANDLE_URL}/api/comparison/{symbol}"
     params = {"period": period}
-    try:
-        response = requests.get(url, params=params, timeout=10)
-        return response.json(), response.status_code
-    except Exception as e:
-        print(f"Error contacting datahandle service: {e}")
-        return {"error": "Data service unavailable"}, 503
+    return retry_request(url, params=params)
     
 def get_dashboard_data(symbol):
     url = f"{DATAHANDLE_URL}/api/dashboard/{symbol}"
-    try:
-        response = requests.get(url, timeout=10)
-        return response.json(), response.status_code
-    except Exception as e:
-        print(f"Error contacting datahandle service: {e}")
-        return {"error": "Data service unavailable"}, 503
+    return retry_request(url)
 
 @app.route('/api/comparison/<symbol>', methods=['GET'])
 def proxy_comparison(symbol):
@@ -537,6 +475,194 @@ def proxy_comparison(symbol):
 def proxy_dashboard(symbol):
     data, status = get_dashboard_data(symbol)
     return jsonify(data), status
+
+# ===========================
+# TRANSACTION HISTORY
+# ===========================
+
+@app.route('/api/transactions', methods=['GET'])
+@jwt_required()
+def get_transactions():
+    try:
+        email = get_jwt_identity()
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 50, type=int)
+        per_page = min(per_page, 100)  # Cap at 100
+
+        transactions = Transaction.query.filter_by(user_id=user.id) \
+            .order_by(Transaction.timestamp.desc()) \
+            .paginate(page=page, per_page=per_page, error_out=False)
+
+        return jsonify({
+            'transactions': [{
+                'id': t.id,
+                'symbol': t.symbol,
+                'shares': t.shares,
+                'price': float(t.price),
+                'action': t.action,
+                'total': float(t.price * t.shares),
+                'timestamp': t.timestamp.isoformat() if t.timestamp else None
+            } for t in transactions.items],
+            'total': transactions.total,
+            'pages': transactions.pages,
+            'current_page': transactions.page
+        })
+    except Exception as e:
+        logger.error(f"Error fetching transactions: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+# ===========================
+# WATCHLIST
+# ===========================
+
+@app.route('/api/watchlist', methods=['GET'])
+@jwt_required()
+def get_watchlist():
+    try:
+        email = get_jwt_identity()
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+
+        items = Watchlist.query.filter_by(user_id=user.id) \
+            .order_by(Watchlist.added_at.desc()).all()
+
+        watchlist_data = []
+        for item in items:
+            entry = {
+                'symbol': item.symbol,
+                'added_at': item.added_at.isoformat() if item.added_at else None,
+            }
+            try:
+                price = get_stock_price(item.symbol)
+                entry['current_price'] = float(price)
+            except Exception:
+                entry['current_price'] = None
+            watchlist_data.append(entry)
+
+        return jsonify({'watchlist': watchlist_data})
+    except Exception as e:
+        logger.error(f"Error fetching watchlist: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/watchlist', methods=['POST'])
+@jwt_required()
+def add_to_watchlist():
+    try:
+        email = get_jwt_identity()
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+
+        data = request.get_json()
+        symbol = data.get('symbol', '').upper().strip()
+        if not symbol:
+            return jsonify({'error': 'Symbol is required'}), 400
+
+        existing = Watchlist.query.filter_by(user_id=user.id, symbol=symbol).first()
+        if existing:
+            return jsonify({'error': 'Already in watchlist'}), 400
+
+        entry = Watchlist(user_id=user.id, symbol=symbol)
+        db.session.add(entry)
+        db.session.commit()
+
+        return jsonify({'message': f'{symbol} added to watchlist'}), 201
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error adding to watchlist: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/watchlist/<symbol>', methods=['DELETE'])
+@jwt_required()
+def remove_from_watchlist(symbol):
+    try:
+        email = get_jwt_identity()
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+
+        entry = Watchlist.query.filter_by(user_id=user.id, symbol=symbol.upper()).first()
+        if not entry:
+            return jsonify({'error': 'Not in watchlist'}), 404
+
+        db.session.delete(entry)
+        db.session.commit()
+
+        return jsonify({'message': f'{symbol} removed from watchlist'})
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error removing from watchlist: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+# ===========================
+# PORTFOLIO HISTORY
+# ===========================
+
+@app.route('/api/portfolio/history', methods=['GET'])
+@jwt_required()
+def get_portfolio_history():
+    """Compute approximate daily portfolio value from transaction history."""
+    try:
+        email = get_jwt_identity()
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+
+        transactions = Transaction.query.filter_by(user_id=user.id) \
+            .order_by(Transaction.timestamp.asc()).all()
+
+        if not transactions:
+            return jsonify({'history': [], 'message': 'No transactions yet'})
+
+        # Build daily snapshots
+        from collections import defaultdict
+        import itertools
+
+        holdings = defaultdict(int)  # symbol -> shares
+        cash = 1000000.0  # Starting balance
+        daily_snapshots = []
+
+        # Group transactions by date
+        for date_key, group in itertools.groupby(
+            transactions, key=lambda t: t.timestamp.date() if t.timestamp else None
+        ):
+            if date_key is None:
+                continue
+            for t in group:
+                if t.action == 'buy':
+                    holdings[t.symbol] += t.shares
+                    cash -= t.price * t.shares
+                elif t.action == 'sell':
+                    holdings[t.symbol] -= t.shares
+                    cash += t.price * t.shares
+                    if holdings[t.symbol] <= 0:
+                        del holdings[t.symbol]
+
+            # Estimate portfolio value at end of this day
+            stock_value = 0
+            for sym, shares in holdings.items():
+                try:
+                    price = get_stock_price(sym)
+                    stock_value += price * shares
+                except Exception:
+                    pass
+
+            daily_snapshots.append({
+                'date': date_key.isoformat(),
+                'total_value': round(cash + stock_value, 2),
+                'cash': round(cash, 2),
+                'stock_value': round(stock_value, 2)
+            })
+
+        return jsonify({'history': daily_snapshots})
+    except Exception as e:
+        logger.error(f"Error computing portfolio history: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
