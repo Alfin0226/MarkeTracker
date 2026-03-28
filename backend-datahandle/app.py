@@ -114,6 +114,34 @@ def get_comparison_data_for_period(symbol,period):
         else:
             dates = performance_df.index.strftime('%Y-%m-%d').tolist()
 
+        # Build OHLC candlestick data with Unix timestamps for lightweight-charts
+        ohlc_data = []
+        volume_data = []
+        for idx, row in stock_hist.iterrows():
+            ts = int(idx.timestamp())
+            ohlc_data.append({
+                'time': ts,
+                'open': round(float(row['Open']), 2),
+                'high': round(float(row['High']), 2),
+                'low': round(float(row['Low']), 2),
+                'close': round(float(row['Close']), 2),
+            })
+            vol_color = 'rgba(0, 214, 143, 0.4)' if row['Close'] >= row['Open'] else 'rgba(255, 107, 107, 0.4)'
+            volume_data.append({
+                'time': ts,
+                'value': int(row['Volume']) if not pd.isna(row['Volume']) else 0,
+                'color': vol_color,
+            })
+
+        # Build S&P 500 line data with matching Unix timestamps
+        sp500_line_data = []
+        for idx, row in sp500_hist.iterrows():
+            ts = int(idx.timestamp())
+            sp500_line_data.append({
+                'time': ts,
+                'value': round(float(row['Close']), 2),
+            })
+
         data = {
             "dates" : dates,
             "stock_prices" : stock_hist['Close'].round(2).tolist(),
@@ -121,9 +149,13 @@ def get_comparison_data_for_period(symbol,period):
             "price_change_percent" : round(price_change_percent, 2),
             "stock_performance": performance_df['stock'].round(2).tolist(),
             "sp500_performance": performance_df['sp500'].round(2).tolist(),
+            "sp500_prices": sp500_hist['Close'].round(2).tolist(),
             "end_price" : round(float(stock_hist['Close'].iloc[-1]), 2),
             'stock_symbol': symbol.upper(),
-            'sp500_symbol': 'S&P 500'
+            'sp500_symbol': 'S&P 500',
+            'ohlc_data': ohlc_data,
+            'volume_data': volume_data,
+            'sp500_line_data': sp500_line_data,
         }
 
         return (data,None,200)

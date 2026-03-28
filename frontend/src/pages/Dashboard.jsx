@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import Chart from 'chart.js/auto';
+import { createChart, ColorType } from 'lightweight-charts';
 import '../styles/Dashboard.css';
 import { useParams, useNavigate } from 'react-router-dom';
 import { fetchDashboardData as apiFetchDashboardData, fetchComparisonData as apiFetchComparisonData, searchSymbols, addToWatchlist, removeFromWatchlist, fetchWatchlist } from '../utils/api';
@@ -10,11 +10,11 @@ const Dashboard = () => {
   const [dashboardData, setDashboardData] = useState(null);
   const [comparisonData, setComparisonData] = useState(null);
   const [period, setPeriod] = useState('1y');
-  const [showSP500, setShowSP500] = useState(true);
+  const [showSP500, setShowSP500] = useState(false);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
   const [suggestions, setSuggestions] = useState([]);
-  const chartRef = useRef(null);
+  const chartContainerRef = useRef(null);
   const chartInstance = useRef(null);
   const searchTimerRef = useRef(null);
   const pollingRef = useRef(null);
@@ -96,117 +96,192 @@ const Dashboard = () => {
     }
   };
 
+  // ===========================
+  // LIGHTWEIGHT-CHARTS RENDERING
+  // ===========================
   useEffect(() => {
-    if (chartInstance.current) {
-      chartInstance.current.destroy();
-    }
-    if (comparisonData && chartRef.current) {
-      const ctx = chartRef.current.getContext('2d');
-      let datasets, yLabel;
+    if (!comparisonData || !chartContainerRef.current) return;
 
-      if (showSP500) {
-        // Show both stock and S&P 500 as percent change
-        datasets = [
-          {
-            label: `${comparisonData.stock_symbol} Performance (%)`,
-            data: comparisonData.stock_performance,
-            borderColor: '#007bff',
-            backgroundColor: 'transparent',
-            borderWidth: 2,
-            fill: false,
-            tension: 0.1,
-            pointRadius: 0,
-          },
-          {
-            label: 'S&P 500 Performance (%)',
-            data: comparisonData.sp500_performance,
-            borderColor: '#ff6384',
-            backgroundColor: 'transparent',
-            borderWidth: 2,
-            fill: false,
-            tension: 0.1,
-            pointRadius: 0,
+    // Clean up previous chart instance
+    if (chartInstance.current) {
+      chartInstance.current.remove();
+      chartInstance.current = null;
+    }
+
+    const container = chartContainerRef.current;
+
+    // Create the chart with dark theme styling
+    const chart = createChart(container, {
+      width: container.clientWidth,
+      height: 420,
+      layout: {
+        background: { type: ColorType.Solid, color: '#1a1d2e' },
+        textColor: '#9aa0b0',
+        fontFamily: 'Inter, sans-serif',
+      },
+      grid: {
+        vertLines: { color: 'rgba(255, 255, 255, 0.04)' },
+        horzLines: { color: 'rgba(255, 255, 255, 0.04)' },
+      },
+      crosshair: {
+        mode: 0, // Normal crosshair
+        vertLine: {
+          color: 'rgba(108, 92, 231, 0.4)',
+          width: 1,
+          style: 2, // Dashed
+          labelBackgroundColor: '#6c5ce7',
+        },
+        horzLine: {
+          color: 'rgba(108, 92, 231, 0.4)',
+          width: 1,
+          style: 2,
+          labelBackgroundColor: '#6c5ce7',
+        },
+      },
+      rightPriceScale: {
+        borderColor: 'rgba(255, 255, 255, 0.06)',
+        scaleMargins: { top: 0.1, bottom: 0.25 },
+      },
+      timeScale: {
+        borderColor: 'rgba(255, 255, 255, 0.06)',
+        timeVisible: period === '1d' || period === '5d',
+        secondsVisible: false,
+      },
+      handleScroll: { vertTouchDrag: false },
+    });
+
+    chartInstance.current = chart;
+
+    // --- Candlestick Series or Fallback Line Series ---
+    if (comparisonData.ohlc_data && comparisonData.ohlc_data.length > 0) {
+      // Full OHLC candlestick mode (requires updated backend-datahandle)
+      const candlestickSeries = chart.addCandlestickSeries({
+        upColor: '#00d68f',
+        downColor: '#ff6b6b',
+        borderDownColor: '#ff6b6b',
+        borderUpColor: '#00d68f',
+        wickDownColor: '#ff6b6b',
+        wickUpColor: '#00d68f',
+        priceScaleId: 'right',
+      });
+      candlestickSeries.setData(comparisonData.ohlc_data);
+
+      // --- Volume Histogram ---
+      if (comparisonData.volume_data && comparisonData.volume_data.length > 0) {
+        const volumeSeries = chart.addHistogramSeries({
+          priceFormat: { type: 'volume' },
+          priceScaleId: 'volume',
+        });
+        volumeSeries.priceScale().applyOptions({
+          scaleMargins: { top: 0.85, bottom: 0 },
+        });
+        volumeSeries.setData(comparisonData.volume_data);
+      }
+    } else if (comparisonData.stock_prices && comparisonData.dates) {
+      // Fallback: build a line series from the legacy dates + stock_prices arrays
+      const lineData = comparisonData.dates.map((dateStr, i) => {
+        // Parse date strings into Unix timestamps
+        let ts;
+        if (dateStr.includes(':')) {
+          // Intraday format "MM-DD HH:MM" — assume current year
+          const year = new Date().getFullYear();
+          ts = Math.floor(new Date(`${year}-${dateStr.replace(' ', 'T')}:00`).getTime() / 1000);
+        } else {
+          // Daily format "YYYY-MM-DD"
+          ts = Math.floor(new Date(dateStr).getTime() / 1000);
+        }
+        return { time: ts, value: comparisonData.stock_prices[i] };
+      }).filter(d => !isNaN(d.time) && d.value != null);
+
+      if (lineData.length > 0) {
+        const lineSeries = chart.addLineSeries({
+          color: '#6c5ce7',
+          lineWidth: 2,
+          priceScaleId: 'right',
+          crosshairMarkerVisible: true,
+          crosshairMarkerRadius: 4,
+          lastValueVisible: true,
+          priceLineVisible: true,
+        });
+        lineSeries.setData(lineData);
+      }
+    }
+
+    // --- S&P 500 Overlay (optional) ---
+    if (showSP500) {
+      let sp500Data = null;
+      let sp500Title = 'S&P 500';
+
+      if (comparisonData.sp500_line_data && comparisonData.sp500_line_data.length > 0) {
+        // Use new Unix-timestamp-based data
+        sp500Data = comparisonData.sp500_line_data;
+      } else if (comparisonData.sp500_performance && comparisonData.dates) {
+        // Fallback: build from legacy dates + sp500_performance (% change)
+        sp500Title = 'S&P 500 (%)';
+        sp500Data = comparisonData.dates.map((dateStr, i) => {
+          let ts;
+          if (dateStr.includes(':')) {
+            const year = new Date().getFullYear();
+            ts = Math.floor(new Date(`${year}-${dateStr.replace(' ', 'T')}:00`).getTime() / 1000);
+          } else {
+            ts = Math.floor(new Date(dateStr).getTime() / 1000);
           }
-        ];
-        yLabel = value => value + '%';
-      } else {
-        // Show only stock price
-        const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-        gradient.addColorStop(0, 'rgba(0, 123, 255, 0.3)');
-        gradient.addColorStop(1, 'rgba(0, 123, 255, 0.05)');
-        datasets = [
-          {
-            label: 'Price ($)',
-            data: comparisonData.stock_prices,
-            borderColor: '#007bff',
-            backgroundColor: gradient,
-            borderWidth: 2,
-            fill: true,
-            tension: 0.4,
-            pointRadius: 0,
-            pointHoverRadius: 6,
-            pointHoverBackgroundColor: '#007bff',
-            pointHoverBorderColor: '#ffffff',
-            pointHoverBorderWidth: 2
-          }
-        ];
-        yLabel = value => '$' + value.toFixed(2);
+          return { time: ts, value: comparisonData.sp500_performance[i] };
+        }).filter(d => !isNaN(d.time) && d.value != null);
       }
 
-      chartInstance.current = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: comparisonData.dates,
-          datasets: datasets,
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { display: true },
-            tooltip: {
-              mode: 'index',
-              intersect: false,
-              backgroundColor: 'rgba(0, 0, 0, 0.8)',
-              titleColor: '#ffffff',
-              bodyColor: '#ffffff',
-              borderColor: '#007bff',
-              borderWidth: 1,
-              callbacks: {
-                label: function (context) {
-                  if (!showSP500) {
-                    return `Price: $${context.parsed.y}`;
-                  }
-                  return `${context.dataset.label}: ${context.parsed.y}%`;
-                }
-              }
-            }
+      if (sp500Data && sp500Data.length > 0) {
+        const sp500Series = chart.addLineSeries({
+          color: '#ff6384',
+          lineWidth: 2,
+          priceScaleId: 'left',
+          lineStyle: 0,
+          crosshairMarkerVisible: true,
+          crosshairMarkerRadius: 4,
+          title: sp500Title,
+        });
+        sp500Series.setData(sp500Data);
+
+        chart.applyOptions({
+          leftPriceScale: {
+            visible: true,
+            borderColor: 'rgba(255, 255, 255, 0.06)',
+            scaleMargins: { top: 0.1, bottom: 0.25 },
           },
-          scales: {
-            x: { grid: { display: true, color: 'rgba(0, 0, 0, 0.1)' } },
-            y: {
-              beginAtZero: false,
-              grid: { display: true, color: 'rgba(0, 0, 0, 0.1)' },
-              ticks: {
-                callback: yLabel
-              }
-            }
-          },
-          interaction: {
-            mode: 'nearest',
-            axis: 'x',
-            intersect: false
-          }
-        }
+        });
+      } else {
+        chart.applyOptions({
+          leftPriceScale: { visible: false },
+        });
+      }
+    } else {
+      chart.applyOptions({
+        leftPriceScale: { visible: false },
       });
     }
 
+    // Fit all data into the visible range
+    chart.timeScale().fitContent();
+
+    // --- Responsive resize with ResizeObserver ---
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width } = entry.contentRect;
+        if (width > 0) {
+          chart.applyOptions({ width });
+        }
+      }
+    });
+    resizeObserver.observe(container);
+
     return () => {
+      resizeObserver.disconnect();
       if (chartInstance.current) {
-        chartInstance.current.destroy();
+        chartInstance.current.remove();
+        chartInstance.current = null;
       }
     };
-  }, [comparisonData, showSP500]);
+  }, [comparisonData, showSP500, period]);
 
   const handleSearchChange = (e) => {
     const val = e.target.value.toUpperCase();
@@ -332,7 +407,9 @@ const Dashboard = () => {
 
             <div className="chart-container">
               <div className="chart-header">
-                <div className="chart-title">Performance vs. S&P 500</div>
+                <div className="chart-title">
+                  {showSP500 ? 'Price Chart + S&P 500 Overlay' : 'Candlestick Chart'}
+                </div>
                 <div className="chart-controls">
                   <div className="period-buttons">
                     {['1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', 'max'].map(p => (
@@ -353,12 +430,23 @@ const Dashboard = () => {
                   </button>
                 </div>
               </div>
-              <div style={{
-                height: '400px',
-                margin: '0 auto'  // Center the chart with equal margins on both sides
-              }}>
-                <canvas ref={chartRef}></canvas>
-              </div>
+              <div
+                ref={chartContainerRef}
+                className="lightweight-chart-wrapper"
+                style={{ width: '100%', height: '420px' }}
+              />
+              {showSP500 && (
+                <div className="chart-legend">
+                  <span className="legend-item">
+                    <span className="legend-color" style={{ background: '#00d68f' }}></span>
+                    {comparisonData?.stock_symbol || symbol} (Candlestick)
+                  </span>
+                  <span className="legend-item">
+                    <span className="legend-color" style={{ background: '#ff6384' }}></span>
+                    S&P 500 (Line — Left Axis)
+                  </span>
+                </div>
+              )}
             </div>
 
             <div className="dashboard-metrics-section">
