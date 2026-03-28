@@ -26,6 +26,7 @@ origins = [
     "http://localhost:5173",
     "https://marketracker.vercel.app",
     "https://backend-theta-roan-61.vercel.app",
+    r"^https://marketracker.*\.vercel\.app$",
 ]
 
 # Add DATAHANDLE_URL to origins if it exists
