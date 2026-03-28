@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { createChart, ColorType } from 'lightweight-charts';
+import { createChart, ColorType, CandlestickSeries, LineSeries, HistogramSeries } from 'lightweight-charts';
 import '../styles/Dashboard.css';
 import { useParams, useNavigate } from 'react-router-dom';
 import { fetchDashboardData as apiFetchDashboardData, fetchComparisonData as apiFetchComparisonData, searchSymbols, addToWatchlist, removeFromWatchlist, fetchWatchlist } from '../utils/api';
@@ -155,7 +155,7 @@ const Dashboard = () => {
     // --- Candlestick Series or Fallback Line Series ---
     if (comparisonData.ohlc_data && comparisonData.ohlc_data.length > 0) {
       // Full OHLC candlestick mode (requires updated backend-datahandle)
-      const candlestickSeries = chart.addCandlestickSeries({
+      const candlestickSeries = chart.addSeries(CandlestickSeries, {
         upColor: '#00d68f',
         downColor: '#ff6b6b',
         borderDownColor: '#ff6b6b',
@@ -168,7 +168,7 @@ const Dashboard = () => {
 
       // --- Volume Histogram ---
       if (comparisonData.volume_data && comparisonData.volume_data.length > 0) {
-        const volumeSeries = chart.addHistogramSeries({
+        const volumeSeries = chart.addSeries(HistogramSeries, {
           priceFormat: { type: 'volume' },
           priceScaleId: 'volume',
         });
@@ -194,7 +194,7 @@ const Dashboard = () => {
       }).filter(d => !isNaN(d.time) && d.value != null);
 
       if (lineData.length > 0) {
-        const lineSeries = chart.addLineSeries({
+        const lineSeries = chart.addSeries(LineSeries, {
           color: '#6c5ce7',
           lineWidth: 2,
           priceScaleId: 'right',
@@ -231,7 +231,7 @@ const Dashboard = () => {
       }
 
       if (sp500Data && sp500Data.length > 0) {
-        const sp500Series = chart.addLineSeries({
+        const sp500Series = chart.addSeries(LineSeries, {
           color: '#ff6384',
           lineWidth: 2,
           priceScaleId: 'left',
