@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Login from './pages/Login';
@@ -12,10 +12,6 @@ import LandingSearchPage from './pages/LandingSearchPage';
 import Dashboard from './pages/Dashboard';
 
 function App() {
-  useEffect(() => {
-    // Clear any existing tokens on app start
-    localStorage.removeItem('token');
-  }, []);
 
   return ( <>
     <Router>
