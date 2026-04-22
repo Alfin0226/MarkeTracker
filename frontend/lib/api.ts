@@ -10,7 +10,7 @@ const api = axios.create({
 
 api.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -26,7 +26,7 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 422) {
       if (typeof window !== 'undefined') {
-        localStorage.removeItem('token');
+        sessionStorage.removeItem('token');
         window.location.href = '/login';
       }
     }
@@ -68,7 +68,7 @@ export const login = async (credentials: { email: string; password: string }) =>
   const response = await api.post('/api/login', credentials);
   const token = response.data.token || response.data.access_token;
   if (token && typeof window !== 'undefined') {
-    localStorage.setItem('token', token);
+    sessionStorage.setItem('token', token);
   }
   return response.data;
 };

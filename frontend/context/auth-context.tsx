@@ -20,12 +20,34 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('token');
+      return sessionStorage.getItem('token');
     }
     return null;
   });
-  const [user, setUser] = useState<User | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [user, setUser] = useState<User | null>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = sessionStorage.getItem('token');
+      if (stored) {
+        try {
+          const decoded = jwtDecode<{ sub: string; exp: number }>(stored);
+          if (decoded.exp * 1000 > Date.now()) return { email: decoded.sub };
+        } catch {}
+      }
+    }
+    return null;
+  });
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const stored = sessionStorage.getItem('token');
+      if (stored) {
+        try {
+          const decoded = jwtDecode<{ sub: string; exp: number }>(stored);
+          if (decoded.exp * 1000 > Date.now()) return true;
+        } catch {}
+      }
+    }
+    return false;
+  });
 
   // Parse user info from JWT and check expiry
   const processToken = useCallback((jwt: string | null) => {
@@ -41,19 +63,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (decoded.exp < currentTime) {
         // Token expired
-        localStorage.removeItem('token');
-        setToken(null);
-        setUser(null);
-        setIsAuthenticated(false);
-        return false;
-      }
+      sessionStorage.removeItem('token');
+      setToken(null);
+      setUser(null);
+      setIsAuthenticated(false);
+      return false;
+    }
 
-      setUser({ email: decoded.sub });
-      setIsAuthenticated(true);
-      return true;
-    } catch {
-      // Invalid token
-      localStorage.removeItem('token');
+    setUser({ email: decoded.sub });
+    setIsAuthenticated(true);
+    return true;
+  } catch {
+    sessionStorage.removeItem('token');
       setToken(null);
       setUser(null);
       setIsAuthenticated(false);
@@ -67,7 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [token, processToken]);
 
   const login = useCallback((newToken: string, userData?: User) => {
-    localStorage.setItem('token', newToken);
+    sessionStorage.setItem('token', newToken);
     setToken(newToken);
     if (userData) {
       setUser(userData);
@@ -76,7 +97,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
-    localStorage.removeItem('token');
+    sessionStorage.removeItem('token');
     setToken(null);
     setUser(null);
     setIsAuthenticated(false);
