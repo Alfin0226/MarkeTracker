@@ -48,9 +48,9 @@ MarketTracker is a web-based investment portfolio tracking platform. It allows u
 
 ## Project Structure
 
-```
+```text
 MarkeTracker/
-  frontend/           React + Vite single-page application
+  frontend/           Next.js 16 App Router application
   backend/            Flask API server (auth, portfolio, trading, watchlist, proxy)
   backend-datahandle/ Flask data service (market data, comparison charts, ML forecast)
 ```
@@ -61,7 +61,7 @@ MarkeTracker/
 |----------------------|--------------------|--------------------------------------------------|
 | `/`                  | Landing Page       | Introduction and call to action                  |
 | `/dashboard`         | Search Page        | Symbol search with autocomplete                  |
-| `/dashboard/:symbol` | Dashboard          | Company info, charts, income grid, trade form    |
+| `/dashboard/[symbol]`| Dashboard          | Company info, charts, income grid, trade form    |
 | `/portfolio`         | Portfolio           | Holdings overview with summary and trade form    |
 | `/transactions`      | Transaction History | Paginated list of all executed trades             |
 | `/watchlist`         | Watchlist           | Tracked symbols with live prices                 |
@@ -97,12 +97,13 @@ MarkeTracker/
 ## Tech Stack
 
 ### Frontend
-- **Framework**: React 18 with Vite
-- **Routing**: React Router v6
+- **Framework**: Next.js 16 (React 19)
+- **Routing**: Next.js App Router
 - **HTTP Client**: Axios
-- **Charting**: Chart.js via react-chartjs-2
-- **Styling**: Custom CSS with Bootstrap utility classes
-- **Analytics**: Vercel Analytics
+- **Charting**: TradingView Lightweight Charts & Chart.js
+- **Styling**: Tailwind CSS & shadcn/ui
+- **Icons**: Lucide React
+- **Analytics**: Google Analytics
 
 ### Backend
 - **Framework**: Python Flask
