@@ -265,26 +265,21 @@ def search_companies():
     return jsonify(companies)
 
 def get_stock_price(symbol):
-    """Get current stock price with multiple fallback methods"""
     try:
         stock = yf.Ticker(symbol)
         
-        # Method 1: Try regular market price
         price = stock.info.get('regularMarketPrice')
         if price:
             return price
             
-        # Method 2: Try current price
         price = stock.info.get('currentPrice')
         if price:
             return price
             
-        # Method 3: Try last close price from history
         hist = stock.history(period='1d')
         if not hist.empty and 'Close' in hist.columns:
             return float(hist['Close'].iloc[-1])
             
-        # Method 4: Try fast info
         fast_info = stock.fast_info
         if hasattr(fast_info, 'last_price') and fast_info.last_price:
             return float(fast_info.last_price)
