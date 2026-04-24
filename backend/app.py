@@ -159,7 +159,10 @@ def login():
             
         if password_matches:
             wake_up_datahandle()
-            access_token = create_access_token(identity=str(user.email))
+            
+            access_token = create_access_token(
+                identity=str(user.email)
+            )
             return jsonify({
                 'access_token': access_token,
                 'user': {
@@ -226,7 +229,8 @@ def get_portfolio():
         response_data = {
             'portfolio': portfolio_data,
             'total_value': float(total_value),
-            'cash_balance': float(user.virtual_balance)
+            'cash_balance': float(user.virtual_balance),
+            'created_at': user.created_at.isoformat() if user.created_at else None
         }
         
         return jsonify(response_data)
@@ -511,6 +515,93 @@ def get_transactions():
         logger.error(f"Error fetching transactions: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/indices', methods=['GET'])
+def get_indices():
+    indices = {
+        'Dow Jones': '^DJI',
+        'Nasdaq 100': 'NQ=F',
+        'S&P 500': '^GSPC'
+    }
+    result = []
+    
+    try:
+        for name, symbol in indices.items():
+            stock = yf.Ticker(symbol)
+            info = stock.fast_info
+            
+            try:
+                hist = stock.history(period='1d', interval='15m')
+                if len(hist) >= 2:
+                    current_price = float(hist['Close'].iloc[-1])
+                    
+                    try:
+                        previous_close = float(info.previous_close)
+                    except Exception:
+                        previous_close = float(hist['Close'].iloc[0])
+                        
+                    change = current_price - previous_close
+                    change_percent = (change / previous_close) * 100 if previous_close else 0
+                    history = [
+                        {
+                            'time': int(index.timestamp()),
+                            'open': float(row['Open']),
+                            'high': float(row['High']),
+                            'low': float(row['Low']),
+                            'close': float(row['Close'])
+                        }
+                        for index, row in hist.iterrows() if not __import__('pandas').isna(row['Close'])
+                    ]
+                elif not hist.empty:
+                    current_price = float(hist['Close'].iloc[-1])
+                    try:
+                        previous_close = float(info.previous_close)
+                    except Exception:
+                        previous_close = current_price
+                        
+                    change = current_price - previous_close
+                    change_percent = (change / previous_close) * 100 if previous_close else 0
+                    history = [
+                        {
+                            'time': int(index.timestamp()),
+                            'open': float(row['Open']),
+                            'high': float(row['High']),
+                            'low': float(row['Low']),
+                            'close': float(row['Close'])
+                        }
+                        for index, row in hist.iterrows() if not __import__('pandas').isna(row['Close'])
+                    ]
+                else:
+                    raise Exception("Empty history")
+            except Exception:
+                try:
+                    info = stock.fast_info
+                    current_price = float(info.last_price)
+                    previous_close = float(info.previous_close)
+                    change = current_price - previous_close
+                    change_percent = (change / previous_close) * 100 if previous_close else 0
+                    history = []
+                except Exception:
+                    # Fallback if fast_info fails
+                    current_price = float(stock.info.get('regularMarketPrice') or stock.history(period='1d')['Close'].iloc[-1])
+                    previous_close = float(stock.info.get('previousClose') or current_price)
+                    change = current_price - previous_close
+                    change_percent = (change / previous_close) * 100 if previous_close else 0
+                    history = []
+            
+            result.append({
+                'name': name,
+                'symbol': symbol,
+                'price': current_price,
+                'change': change,
+                'changePercent': change_percent,
+                'history': history
+            })
+            
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Error fetching indices: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
 # ===========================
 # WATCHLIST
 # ===========================
@@ -534,10 +625,58 @@ def get_watchlist():
                 'added_at': item.added_at.isoformat() if item.added_at else None,
             }
             try:
-                price = get_stock_price(item.symbol)
-                entry['current_price'] = float(price)
-            except Exception:
+                company = Company.query.filter_by(symbol=item.symbol).first()
+                if company:
+                    entry['name'] = company.name
+                    
+                stock = yf.Ticker(item.symbol)
+                info = stock.fast_info
+                
+                try:
+                    hist = stock.history(period='5d')
+                    if len(hist) >= 2:
+                        current_price = float(hist['Close'].iloc[-1])
+                        previous_close = float(hist['Close'].iloc[-2])
+                        change = current_price - previous_close
+                        change_percent = (change / previous_close) * 100
+                    elif not hist.empty:
+                        current_price = float(hist['Close'].iloc[-1])
+                        previous_close = current_price
+                        change = 0
+                        change_percent = 0
+                    else:
+                        raise Exception("Empty history")
+                except Exception:
+                    try:
+                        info = stock.fast_info
+                        current_price = float(info.last_price)
+                        previous_close = float(info.previous_close)
+                        change = current_price - previous_close
+                        change_percent = (change / previous_close) * 100 if previous_close else 0
+                    except Exception:
+                        current_price = float(get_stock_price(item.symbol))
+                        previous_close = current_price
+                        change = 0
+                        change_percent = 0
+
+                entry['current_price'] = current_price
+                entry['change'] = change
+                entry['change_percent'] = change_percent
+                
+                if 'name' not in entry:
+                    try:
+                        entry['name'] = stock.info.get('shortName', item.symbol)
+                    except Exception:
+                        entry['name'] = item.symbol
+                        
+            except Exception as e:
+                logger.warning(f"Error fetching extended data for {item.symbol}: {e}")
                 entry['current_price'] = None
+                entry['change'] = 0
+                entry['change_percent'] = 0
+                if 'name' not in entry:
+                    entry['name'] = item.symbol
+                    
             watchlist_data.append(entry)
 
         return jsonify({'watchlist': watchlist_data})
@@ -602,34 +741,94 @@ def remove_from_watchlist(symbol):
 @app.route('/api/portfolio/history', methods=['GET'])
 @jwt_required()
 def get_portfolio_history():
-    """Compute approximate daily portfolio value from transaction history."""
+    """Compute approximate weekly portfolio value from transaction history and yfinance weekly close."""
     try:
         email = get_jwt_identity()
         user = User.query.filter_by(email=email).first()
         if not user:
             return jsonify({'error': 'User not found'}), 404
 
+        start_date_str = request.args.get('start_date')
+        end_date_str = request.args.get('end_date')
+        
+        import datetime
+        from collections import defaultdict
+        import yfinance as yf
+        import pandas as pd
+
+        today = datetime.date.today()
+        if end_date_str:
+            end_date = datetime.datetime.fromisoformat(end_date_str.split('T')[0]).date()
+        else:
+            end_date = today
+
+        if start_date_str:
+            start_date = datetime.datetime.fromisoformat(start_date_str.split('T')[0]).date()
+        else:
+            start_date = end_date - datetime.timedelta(days=90)
+
+        def get_week_start(d):
+            return d - datetime.timedelta(days=d.weekday())
+
+        start_week = get_week_start(start_date)
+        end_week = get_week_start(end_date)
+        
+        weeks = []
+        current_w = start_week
+        while current_w <= end_week:
+            weeks.append(current_w)
+            current_w += datetime.timedelta(days=7)
+
         transactions = Transaction.query.filter_by(user_id=user.id) \
             .order_by(Transaction.timestamp.asc()).all()
 
-        if not transactions:
-            return jsonify({'history': [], 'message': 'No transactions yet'})
+        unique_symbols = list(set([t.symbol for t in transactions]))
+        
+        # Download daily prices up to end_week + 7 days
+        download_end = end_week + datetime.timedelta(days=8)
+        download_start = start_week - datetime.timedelta(days=7) 
+        
+        closes_df = pd.DataFrame()
+        if unique_symbols:
+            try:
+                if len(unique_symbols) == 1:
+                    data = yf.download(unique_symbols[0], start=download_start, end=download_end, interval="1d", progress=False)
+                    if not data.empty and 'Close' in data.columns:
+                        closes_df = data[['Close']].copy()
+                        closes_df.columns = [unique_symbols[0]]
+                else:
+                    data = yf.download(unique_symbols, start=download_start, end=download_end, interval="1d", progress=False)
+                    if not data.empty and 'Close' in data.columns:
+                        closes_df = data['Close'].copy()
+                        if isinstance(closes_df, pd.Series):
+                            closes_df = closes_df.to_frame()
+            except Exception as e:
+                logger.error(f"Error downloading yf data: {e}")
 
-        # Build daily snapshots
-        from collections import defaultdict
-        import itertools
+        # ensure datetime index is naive date
+        if not closes_df.empty:
+            closes_df.index = closes_df.index.tz_localize(None).date
 
-        holdings = defaultdict(int)  # symbol -> shares
-        cash = 1000000.0  # Starting balance
-        daily_snapshots = []
+        holdings = defaultdict(int)  
+        cash = 1000000.0  
+        tx_idx = 0
+        num_tx = len(transactions)
 
-        # Group transactions by date
-        for date_key, group in itertools.groupby(
-            transactions, key=lambda t: t.timestamp.date() if t.timestamp else None
-        ):
-            if date_key is None:
-                continue
-            for t in group:
+        weekly_snapshots = []
+        if not weeks:
+            return jsonify({'history': []})
+
+        for w in weeks:
+            # Friday as last trading day of the week, or up to Sunday
+            w_end_date = w + datetime.timedelta(days=6) # Sunday
+            w_tz_aware_end = datetime.datetime.combine(w_end_date + datetime.timedelta(days=1), datetime.time.min).replace(tzinfo=datetime.timezone.utc)
+            
+            while tx_idx < num_tx:
+                t = transactions[tx_idx]
+                t_stamp = t.timestamp.replace(tzinfo=datetime.timezone.utc) if t.timestamp.tzinfo is None else t.timestamp
+                if t_stamp >= w_tz_aware_end:
+                    break
+                
                 if t.action == 'buy':
                     holdings[t.symbol] += t.shares
                     cash -= t.price * t.shares
@@ -638,24 +837,36 @@ def get_portfolio_history():
                     cash += t.price * t.shares
                     if holdings[t.symbol] <= 0:
                         del holdings[t.symbol]
+                tx_idx += 1
 
-            # Estimate portfolio value at end of this day
             stock_value = 0
-            for sym, shares in holdings.items():
-                try:
-                    price = get_stock_price(sym)
-                    stock_value += price * shares
-                except Exception:
-                    pass
+            # Get latest available prices for this week
+            if not closes_df.empty:
+                valid_dates = closes_df.index[closes_df.index <= w_end_date]
+                if len(valid_dates) > 0:
+                    last_trading_day = valid_dates.max()
+                    day_prices = closes_df.loc[last_trading_day]
+                    
+                    for sym, shares in holdings.items():
+                        if shares > 0 and sym in day_prices and pd.notna(day_prices[sym]):
+                            stock_value += day_prices[sym] * shares
+                else:
+                    # fallback to cached prices if yfinance misses data
+                    for sym, shares in holdings.items():
+                        if shares > 0:
+                            try:
+                                stock_value += get_stock_price(sym) * shares
+                            except:
+                                pass
 
-            daily_snapshots.append({
-                'date': date_key.isoformat(),
-                'total_value': round(cash + stock_value, 2),
+            weekly_snapshots.append({
+                'date': w_end_date.isoformat(),
                 'cash': round(cash, 2),
-                'stock_value': round(stock_value, 2)
+                'stock_value': round(stock_value, 2),
+                'total_value': round(cash + stock_value, 2)
             })
 
-        return jsonify({'history': daily_snapshots})
+        return jsonify({'history': weekly_snapshots})
     except Exception as e:
         logger.error(f"Error computing portfolio history: {str(e)}")
         return jsonify({'error': str(e)}), 500

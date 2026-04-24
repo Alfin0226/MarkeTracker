@@ -69,3 +69,11 @@ def create_watchlist_sequence(target, connection, **kw):
     connection.execute(text(f'DROP SEQUENCE IF EXISTS {sequence_name}'))
     connection.execute(text(f'CREATE SEQUENCE {sequence_name} START WITH {max_id + 1}'))
     connection.execute(text(f"ALTER TABLE watchlist ALTER COLUMN id SET DEFAULT nextval('{sequence_name}')"))
+
+class BenchmarkHistory(db.Model):
+    __tablename__ = 'benchmark_history'
+    id = db.Column(db.Integer, primary_key=True)
+    symbol = db.Column(db.String(10), nullable=False)
+    price = db.Column(db.Float, nullable=False)
+    timestamp = db.Column(db.DateTime, nullable=False)
+    __table_args__ = (db.UniqueConstraint('symbol', 'timestamp', name='uix_symbol_timestamp'),)

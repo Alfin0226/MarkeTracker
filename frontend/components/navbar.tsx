@@ -17,7 +17,7 @@ import {
 export default function Navbar() {
   const router = useRouter();
   const pathname = usePathname();
-  const { isAuthenticated, logout } = useAuth();
+  const { isAuthenticated, isLoading, logout } = useAuth();
 
   const handleLogout = () => {
     logout();
@@ -25,6 +25,20 @@ export default function Navbar() {
   };
 
   const isActive = (path: string) => pathname === path;
+
+  if (isLoading) {
+    return (
+      <nav className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-xl">
+        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6">
+          <div className="w-32 h-5 bg-muted rounded animate-pulse" />
+          <div className="flex items-center gap-2">
+            <div className="w-20 h-8 bg-muted rounded animate-pulse" />
+            <div className="w-20 h-8 bg-muted rounded animate-pulse" />
+          </div>
+        </div>
+      </nav>
+    );
+  }
 
   return (
     <nav className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-xl">

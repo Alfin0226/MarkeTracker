@@ -88,6 +88,15 @@ export const fetchTransactions = async (page = 1, perPage = 50) => {
 };
 
 // ===========================
+// INDICES
+// ===========================
+
+export const fetchIndices = async () => {
+  const response = await api.get('/api/indices');
+  return response.data;
+};
+
+// ===========================
 // WATCHLIST
 // ===========================
 
@@ -110,7 +119,12 @@ export const removeFromWatchlist = async (symbol: string) => {
 // PORTFOLIO HISTORY
 // ===========================
 
-export const fetchPortfolioHistory = async () => {
-  const response = await api.get('/api/portfolio/history');
+export const fetchPortfolioHistory = async (startDate?: string, endDate?: string) => {
+  const params = new URLSearchParams();
+  if (startDate) params.append("start_date", startDate);
+  if (endDate) params.append("end_date", endDate);
+  
+  const queryString = params.toString() ? `?${params.toString()}` : "";
+  const response = await api.get(`/api/portfolio/history${queryString}`);
   return response.data;
 };

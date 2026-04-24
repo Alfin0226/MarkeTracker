@@ -272,19 +272,19 @@ function StockDashboardContent() {
               className="pl-9 bg-card/50 backdrop-blur-sm border-border/50 focus:border-violet-500"
             />
           </div>
-          {suggestions.length > 0 && (
-            <ul className="absolute top-full left-0 right-0 mt-1 bg-popover border border-border rounded-lg shadow-xl overflow-hidden max-h-60 overflow-y-auto">
-              {suggestions.map((s) => (
-                <li
-                  key={s.symbol}
-                  onClick={() => handleSuggestionClick(s.symbol)}
-                  className="px-4 py-2.5 cursor-pointer text-sm hover:bg-accent transition-colors border-b border-border/30 last:border-0"
-                >
-                  <strong className="text-violet-400">{s.symbol}</strong> - {s.name}
-                </li>
-              ))}
-            </ul>
-          )}
+      {suggestions.length > 0 && (
+        <ul className="absolute top-full left-0 right-0 mt-1 bg-popover border border-border rounded-lg shadow-xl overflow-hidden max-h-72 overflow-y-auto">
+          {suggestions.map((s) => (
+            <li
+              key={s.symbol}
+              onClick={() => handleSuggestionClick(s.symbol)}
+              className="px-4 py-2.5 cursor-pointer text-sm hover:bg-accent transition-colors border-b border-border/30 last:border-0"
+            >
+              <strong className="text-violet-400">{s.symbol}</strong> - {s.name}
+            </li>
+          ))}
+        </ul>
+      )}
         </div>
       </div>
 

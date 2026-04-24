@@ -67,19 +67,19 @@ export default function LoginPage() {
                 required
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-muted-foreground mb-1.5">
-                Password
-              </label>
-              <Input
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
-            <Button
+<div>
+<label className="block text-sm font-medium text-muted-foreground mb-1.5">
+Password
+</label>
+<Input
+type="password"
+placeholder="••••••••"
+value={password}
+onChange={(e) => setPassword(e.target.value)}
+required
+/>
+</div>
+<Button
               type="submit"
               className="w-full bg-gradient-to-r from-violet-600 to-blue-600 text-white hover:from-violet-700 hover:to-blue-700"
             >
