@@ -22,7 +22,13 @@ interface IndexData {
   price: number;
   change: number;
   changePercent: number;
-  history?: number[];
+  history?: {
+    time: string | number;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+  }[];
 }
 
 interface WatchlistData {
