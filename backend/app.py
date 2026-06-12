@@ -871,5 +871,215 @@ def get_portfolio_history():
         logger.error(f"Error computing portfolio history: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+# ===========================
+# PORTFOLIO BACKTESTER
+# ===========================
+
+@app.route('/api/backtest', methods=['POST'])
+@jwt_required()
+def backtest_portfolio():
+    """Backtest a portfolio of tickers with given weights over a historical period."""
+    try:
+        import datetime
+        import pandas as pd
+        import numpy as np
+        import math
+
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+
+        tickers = data.get('tickers', [])
+        weights = data.get('weights', [])
+        start_date_str = data.get('start_date')
+        end_date_str = data.get('end_date')
+        initial_investment = data.get('initial_investment', 10000)
+
+        # Validation
+        if not tickers or not weights:
+            return jsonify({'error': 'Tickers and weights are required'}), 400
+        if len(tickers) != len(weights):
+            return jsonify({'error': 'Tickers and weights must have the same length'}), 400
+        if len(tickers) > 10:
+            return jsonify({'error': 'Maximum 10 tickers allowed'}), 400
+        if abs(sum(weights) - 100) > 0.5:
+            return jsonify({'error': f'Weights must sum to 100% (currently {sum(weights)}%)'}), 400
+        if not start_date_str or not end_date_str:
+            return jsonify({'error': 'Start date and end date are required'}), 400
+
+        try:
+            initial_investment = float(initial_investment)
+            if initial_investment <= 0:
+                return jsonify({'error': 'Initial investment must be positive'}), 400
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Invalid initial investment amount'}), 400
+
+        start_date = datetime.datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        end_date = datetime.datetime.strptime(end_date_str, '%Y-%m-%d').date()
+
+        if start_date >= end_date:
+            return jsonify({'error': 'Start date must be before end date'}), 400
+
+        # Normalize weights to fractions
+        weight_fractions = [w / 100.0 for w in weights]
+
+        # Download data for all tickers + S&P 500 benchmark
+        all_symbols = list(set([t.upper() for t in tickers] + ['^GSPC']))
+        download_end = end_date + datetime.timedelta(days=2)  # buffer for market close
+
+        try:
+            if len(all_symbols) == 1:
+                raw_data = yf.download(all_symbols[0], start=start_date, end=download_end, interval='1d', progress=False)
+                if not raw_data.empty and 'Close' in raw_data.columns:
+                    closes = raw_data[['Close']].copy()
+                    closes.columns = [all_symbols[0]]
+                else:
+                    return jsonify({'error': 'No data available for the selected tickers and date range'}), 400
+            else:
+                raw_data = yf.download(all_symbols, start=start_date, end=download_end, interval='1d', progress=False)
+                if raw_data.empty:
+                    return jsonify({'error': 'No data available for the selected tickers and date range'}), 400
+                if 'Close' in raw_data.columns:
+                    closes = raw_data['Close'].copy()
+                    if isinstance(closes, pd.Series):
+                        closes = closes.to_frame()
+                else:
+                    return jsonify({'error': 'Could not retrieve closing prices'}), 400
+        except Exception as e:
+            logger.error(f"Error downloading backtest data: {e}")
+            return jsonify({'error': f'Failed to download market data: {str(e)}'}), 500
+
+        # Ensure timezone-naive index
+        if closes.index.tz is not None:
+            closes.index = closes.index.tz_localize(None)
+
+        closes = closes.ffill().dropna(how='all')
+
+        if closes.empty:
+            return jsonify({'error': 'No price data available for the given date range'}), 400
+
+        # Check which tickers have data
+        ticker_list_upper = [t.upper() for t in tickers]
+        missing_tickers = [t for t in ticker_list_upper if t not in closes.columns or closes[t].isna().all()]
+        if missing_tickers:
+            return jsonify({'error': f'No data found for: {", ".join(missing_tickers)}'}), 400
+
+        # Calculate daily returns
+        daily_returns = closes.pct_change().dropna()
+
+        # Calculate portfolio daily returns (weighted sum of individual returns)
+        portfolio_daily_returns = pd.Series(0.0, index=daily_returns.index)
+        for i, ticker in enumerate(ticker_list_upper):
+            if ticker in daily_returns.columns:
+                portfolio_daily_returns += weight_fractions[i] * daily_returns[ticker]
+
+        # Calculate cumulative portfolio value
+        portfolio_cumulative = (1 + portfolio_daily_returns).cumprod() * initial_investment
+
+        # S&P 500 benchmark
+        sp500_daily_returns = daily_returns['^GSPC'] if '^GSPC' in daily_returns.columns else pd.Series(0.0, index=daily_returns.index)
+        sp500_cumulative = (1 + sp500_daily_returns).cumprod() * initial_investment
+
+        # Determine evaluation interval based on date range span
+        span_days = (end_date - start_date).days
+        if span_days <= 190:        # ~6 months
+            eval_interval = 2       # every 2 days
+        elif span_days <= 400:      # ~1 year
+            eval_interval = 5       # weekly (trading days)
+        else:                       # 2+ years
+            eval_interval = 10      # biweekly (trading days)
+
+        # Sample time series at the evaluation interval
+        sampled_indices = list(range(0, len(portfolio_cumulative), eval_interval))
+        if (len(portfolio_cumulative) - 1) not in sampled_indices:
+            sampled_indices.append(len(portfolio_cumulative) - 1)
+
+        portfolio_series = []
+        sp500_series = []
+        for idx in sampled_indices:
+            date_val = portfolio_cumulative.index[idx]
+            date_str = date_val.strftime('%Y-%m-%d') if hasattr(date_val, 'strftime') else str(date_val)
+
+            portfolio_series.append({
+                'date': date_str,
+                'value': round(float(portfolio_cumulative.iloc[idx]), 2)
+            })
+            if idx < len(sp500_cumulative):
+                sp500_series.append({
+                    'date': date_str,
+                    'value': round(float(sp500_cumulative.iloc[idx]), 2)
+                })
+
+        # Summary metrics
+        total_return_pct = ((portfolio_cumulative.iloc[-1] / initial_investment) - 1) * 100
+
+        trading_days = len(portfolio_daily_returns)
+        years = trading_days / 252.0
+        if years > 0:
+            annualized_return = ((portfolio_cumulative.iloc[-1] / initial_investment) ** (1 / years) - 1) * 100
+        else:
+            annualized_return = 0
+
+        # Max drawdown
+        running_max = portfolio_cumulative.cummax()
+        drawdown = (portfolio_cumulative - running_max) / running_max
+        max_drawdown = float(drawdown.min()) * 100
+
+        # Volatility (annualized std dev of daily returns)
+        volatility = float(portfolio_daily_returns.std() * math.sqrt(252)) * 100
+
+        # Sharpe ratio (assuming risk-free rate of ~4.5%)
+        risk_free_rate = 0.045
+        excess_return = float(annualized_return / 100) - risk_free_rate
+        sharpe_ratio = (excess_return / (volatility / 100)) if volatility > 0 else 0
+
+        # S&P 500 metrics
+        sp500_total_return = ((sp500_cumulative.iloc[-1] / initial_investment) - 1) * 100 if not sp500_cumulative.empty else 0
+
+        # Per-ticker breakdown
+        ticker_breakdown = []
+        for i, ticker in enumerate(ticker_list_upper):
+            if ticker in closes.columns:
+                ticker_prices = closes[ticker].dropna()
+                if len(ticker_prices) >= 2:
+                    ticker_return = ((ticker_prices.iloc[-1] / ticker_prices.iloc[0]) - 1) * 100
+                    contribution = ticker_return * weight_fractions[i]
+                else:
+                    ticker_return = 0
+                    contribution = 0
+
+                ticker_breakdown.append({
+                    'symbol': ticker,
+                    'weight': weights[i],
+                    'return_pct': round(float(ticker_return), 2),
+                    'contribution': round(float(contribution), 2),
+                    'start_price': round(float(ticker_prices.iloc[0]), 2) if len(ticker_prices) > 0 else 0,
+                    'end_price': round(float(ticker_prices.iloc[-1]), 2) if len(ticker_prices) > 0 else 0,
+                })
+
+        return jsonify({
+            'portfolio_series': portfolio_series,
+            'sp500_series': sp500_series,
+            'summary': {
+                'initial_investment': initial_investment,
+                'final_value': round(float(portfolio_cumulative.iloc[-1]), 2),
+                'total_return_pct': round(float(total_return_pct), 2),
+                'annualized_return_pct': round(float(annualized_return), 2),
+                'max_drawdown_pct': round(float(max_drawdown), 2),
+                'volatility_pct': round(float(volatility), 2),
+                'sharpe_ratio': round(float(sharpe_ratio), 2),
+                'sp500_return_pct': round(float(sp500_total_return), 2),
+                'trading_days': trading_days,
+                'eval_interval': eval_interval,
+            },
+            'ticker_breakdown': ticker_breakdown,
+        })
+
+    except Exception as e:
+        logger.error(f"Error in backtest: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     app.run(debug=True)
+

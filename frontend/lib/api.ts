@@ -128,3 +128,19 @@ export const fetchPortfolioHistory = async (startDate?: string, endDate?: string
   const response = await api.get(`/api/portfolio/history${queryString}`);
   return response.data;
 };
+
+// ===========================
+// PORTFOLIO BACKTESTER
+// ===========================
+
+export const runBacktest = async (params: {
+  tickers: string[];
+  weights: number[];
+  start_date: string;
+  end_date: string;
+  initial_investment: number;
+}) => {
+  const response = await api.post('/api/backtest', params);
+  return response.data;
+};
+

@@ -9,6 +9,7 @@ import {
   Briefcase,
   Clock,
   Eye,
+  FlaskConical,
   LogOut,
   LogIn,
   UserPlus,
@@ -93,6 +94,16 @@ export default function Navbar() {
                 >
                   <Eye className="h-4 w-4" />
                   <span className="hidden sm:inline">Watchlist</span>
+                </Button>
+              </Link>
+              <Link href="/backtest">
+                <Button
+                  variant={isActive("/backtest") ? "secondary" : "ghost"}
+                  size="sm"
+                  className="gap-1.5 text-sm font-medium"
+                >
+                  <FlaskConical className="h-4 w-4" />
+                  <span className="hidden sm:inline">Backtest</span>
                 </Button>
               </Link>
               <Button
