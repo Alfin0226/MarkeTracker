@@ -22,16 +22,49 @@ export default function LightweightSparkline({ data, isPositive }: LightweightSp
   useEffect(() => {
     if (!containerRef.current || !data || data.length === 0) return;
 
+    const chartData = data
+      .map((d) => {
+        let timeVal: number;
+        if (typeof d.time === "number") {
+          timeVal = d.time > 100000000000 ? Math.floor(d.time / 1000) : d.time;
+        } else {
+          timeVal = Math.floor(new Date(d.time).getTime() / 1000);
+        }
+        return {
+          time: timeVal,
+          open: d.open,
+          high: d.high,
+          low: d.low,
+          close: d.close,
+        };
+      })
+      .sort((a, b) => a.time - b.time);
+
+    // Filter out duplicates
+    const uniqueChartData: typeof chartData = [];
+    const seenTimes = new Set<number>();
+    for (const point of chartData) {
+      if (!seenTimes.has(point.time)) {
+        seenTimes.add(point.time);
+        uniqueChartData.push(point);
+      }
+    }
+
+    if (uniqueChartData.length === 0) return;
+
     const chart = createChart(containerRef.current, {
+      width: containerRef.current.clientWidth,
+      height: containerRef.current.clientHeight || 48,
       handleScroll: false,
       handleScale: false,
       layout: {
         background: { type: ColorType.Solid, color: "transparent" },
-        textColor: "transparent", // Hide text
+        textColor: "transparent",
+        attributionLogo: false,
       },
       grid: {
-        vertLines: { color: "transparent", visible: false },
-        horzLines: { color: "transparent", visible: false },
+        vertLines: { visible: false },
+        horzLines: { visible: false },
       },
       crosshair: {
         mode: 0,
@@ -45,8 +78,8 @@ export default function LightweightSparkline({ data, isPositive }: LightweightSp
         visible: false,
         borderVisible: false,
         scaleMargins: {
-          top: 0.35,
-          bottom: 0.35,
+          top: 0.1,
+          bottom: 0.1,
         },
       },
       timeScale: {
@@ -55,28 +88,24 @@ export default function LightweightSparkline({ data, isPositive }: LightweightSp
       },
     });
 
-    const candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: '#22c55e',
-      downColor: '#ef4444',
+    const candlestickSeries = chart.addSeries(CandlestickSeries, {
+      upColor: "#10b981",
+      downColor: "#ef4444",
       borderVisible: false,
-      wickUpColor: '#22c55e',
-      wickDownColor: '#ef4444',
-      priceLineVisible: false,
-      lastValueVisible: false,
+      wickUpColor: "#10b981",
+      wickDownColor: "#ef4444",
     });
 
-    candleSeries.setData(data as any);
+    candlestickSeries.setData(uniqueChartData as any);
     
-    // Fit the content initially smoothly
-    const margin = data.length * 0.4; // 40% margin on both sides to make candles thinner
-    chart.timeScale().setVisibleLogicalRange({
-      from: -margin,
-      to: data.length - 1 + margin
-    });
+    chart.timeScale().fitContent();
 
     const handleResize = () => {
       if (containerRef.current) {
-        chart.applyOptions({ width: containerRef.current.clientWidth });
+        chart.applyOptions({
+          width: containerRef.current.clientWidth,
+          height: containerRef.current.clientHeight || 48
+        });
       }
     };
     
@@ -86,11 +115,20 @@ export default function LightweightSparkline({ data, isPositive }: LightweightSp
       window.removeEventListener("resize", handleResize);
       chart.remove();
     };
-  }, [data, isPositive]);
+  }, [data]);
 
   if (!data || !data.length) {
     return <div className="h-12 w-full flex items-center text-xs text-muted-foreground">No data</div>;
   }
 
-  return <div ref={containerRef} className="h-12 w-full" />;
+  return (
+    <div className="relative w-full h-12">
+      <style dangerouslySetInnerHTML={{ __html: `
+        #tv-attr-logo, [class*="tv-attr-logo"], a[href*="tradingview.com"] {
+          display: none !important;
+        }
+      `}} />
+      <div ref={containerRef} className="h-12 w-full" />
+    </div>
+  );
 }

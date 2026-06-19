@@ -61,19 +61,19 @@ export default function TradeForm({ onTradeComplete }: TradeFormProps) {
   };
 
   return (
-    <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
+    <Card className="card-glass">
       <CardHeader className="pb-4">
         <CardTitle className="text-lg">Execute Trade</CardTitle>
       </CardHeader>
       <CardContent>
         {tradeError && (
-          <div className="flex items-center gap-2 p-3 mb-4 rounded-lg bg-red-500/10 border border-red-500/30 text-red-500 text-sm">
+          <div className="alert-error flex items-center gap-2">
             <AlertCircle className="h-4 w-4 shrink-0" />
             {tradeError}
           </div>
         )}
         {tradeSuccess && (
-          <div className="flex items-center gap-2 p-3 mb-4 rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-400 text-sm">
+          <div className="alert-success flex items-center gap-2">
             <CheckCircle2 className="h-4 w-4 shrink-0" />
             {tradeSuccess}
           </div>
@@ -121,7 +121,7 @@ export default function TradeForm({ onTradeComplete }: TradeFormProps) {
             <div>
               <Button
                 type="submit"
-                className="whitespace-nowrap bg-gradient-to-r from-violet-600 to-blue-600 text-white hover:from-violet-700 hover:to-blue-700"
+                className="whitespace-nowrap bg-blue-600 text-white hover:bg-blue-700"
               >
                 Execute Trade
               </Button>

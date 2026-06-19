@@ -42,7 +42,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
           </p>
           <Button
             onClick={this.handleRetry}
-            className="bg-gradient-to-r from-violet-600 to-blue-600 text-white hover:from-violet-700 hover:to-blue-700"
+            className="bg-blue-600 text-white hover:bg-blue-700"
           >
             Try Again
           </Button>

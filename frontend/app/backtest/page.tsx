@@ -188,9 +188,8 @@ function BacktestContent() {
 
   return (
     <div className="min-h-[calc(100vh-3.5rem)] p-6 md:p-10 max-w-[1400px] mx-auto space-y-8">
-      {/* Header */}
       <div>
-        <h1 className="text-2xl md:text-3xl font-extrabold bg-gradient-to-r from-violet-500 to-blue-500 bg-clip-text text-transparent">
+        <h1 className="text-2xl md:text-3xl font-bold text-blue-400">
           Portfolio Backtester
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
@@ -198,19 +197,16 @@ function BacktestContent() {
         </p>
       </div>
 
-      {/* Configuration Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left: Ticker Input */}
         <div className="lg:col-span-2 space-y-4">
-          <Card className="border-border/50 bg-card/50 backdrop-blur-sm shadow-xl">
+          <Card className="card-glass">
             <CardHeader className="pb-3">
               <CardTitle className="text-lg flex items-center gap-2">
-                <Search className="h-5 w-5 text-violet-400" />
+                <Search className="h-5 w-5 text-blue-400" />
                 Add Tickers
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Search Input */}
               <div className="relative">
                 <Input
                   type="text"
@@ -237,7 +233,7 @@ function BacktestContent() {
                           onClick={() => addTicker(s.symbol, s.name)}
                           className="px-4 py-3 cursor-pointer text-sm hover:bg-accent transition-colors border-b border-border/30 last:border-0"
                         >
-                          <strong className="text-violet-400">{s.symbol}</strong>{" "}
+                          <strong className="text-blue-400">{s.symbol}</strong>{" "}
                           — {s.name}
                         </li>
                       ))}
@@ -245,7 +241,6 @@ function BacktestContent() {
                 )}
               </div>
 
-              {/* Ticker List with Weights */}
               {tickers.length > 0 && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
@@ -266,17 +261,17 @@ function BacktestContent() {
                   {tickers.map((t) => (
                     <div
                       key={t.symbol}
-                      className="flex items-center gap-3 p-3 rounded-lg bg-background/50 border border-border/30"
+                      className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 p-3 card-flat bg-background/50 border-border/30"
                     >
                       <div className="flex-1 min-w-0">
-                        <span className="font-semibold text-sm text-violet-400">
+                        <span className="font-semibold text-sm text-blue-400">
                           {t.symbol}
                         </span>
                         <span className="text-xs text-muted-foreground ml-2 truncate">
                           {t.name}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 w-full sm:w-auto">
                         <input
                           type="range"
                           min="0"
@@ -286,7 +281,7 @@ function BacktestContent() {
                           onChange={(e) =>
                             updateWeight(t.symbol, parseFloat(e.target.value))
                           }
-                          className="w-24 h-1.5 accent-violet-500 cursor-pointer"
+                          className="w-24 h-1.5 accent-blue-500 cursor-pointer"
                         />
                         <Input
                           type="number"
@@ -313,7 +308,6 @@ function BacktestContent() {
                     </div>
                   ))}
 
-                  {/* Weight Total */}
                   <div
                     className={`text-sm font-medium text-right pr-2 transition-colors ${
                       weightsValid
@@ -336,9 +330,8 @@ function BacktestContent() {
           </Card>
         </div>
 
-        {/* Right: Config & Run */}
         <div className="space-y-4">
-          <Card className="border-border/50 bg-card/50 backdrop-blur-sm shadow-xl">
+          <Card className="card-flat bg-card/50">
             <CardHeader className="pb-3">
               <CardTitle className="text-lg flex items-center gap-2">
                 <Activity className="h-5 w-5 text-blue-400" />
@@ -421,7 +414,7 @@ function BacktestContent() {
             id="run-backtest-btn"
             onClick={handleRunBacktest}
             disabled={running || tickers.length === 0 || !weightsValid}
-            className="w-full h-12 gap-2 text-base font-semibold bg-gradient-to-r from-violet-600 to-blue-600 text-white hover:from-violet-700 hover:to-blue-700 shadow-lg shadow-violet-900/20 transition-all duration-200"
+            className="w-full h-12 gap-2 text-base font-semibold bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-900/20 transition-all duration-200"
           >
             {running ? (
               <>
@@ -437,18 +430,16 @@ function BacktestContent() {
           </Button>
 
           {error && (
-            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+            <div className="alert-error text-center">
               {error}
             </div>
           )}
         </div>
       </div>
 
-      {/* Results Section */}
       {result && (
         <div className="space-y-6 animate-in fade-in-0 slide-in-from-bottom-4 duration-500">
-          {/* Summary Metrics */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
             {[
               {
                 label: "Final Value",
@@ -514,7 +505,7 @@ function BacktestContent() {
             ].map((metric, i) => (
               <Card
                 key={i}
-                className="border-border/50 bg-card/50 backdrop-blur-sm shadow-lg"
+                className={i % 2 === 0 ? "card-glass shadow-xs" : "card-flat shadow-xs"}
               >
                 <CardContent className="pt-5 pb-4 px-4">
                   <div className="flex items-center gap-2 mb-2">
@@ -523,7 +514,7 @@ function BacktestContent() {
                       {metric.label}
                     </span>
                   </div>
-                  <div className={`text-xl font-bold ${metric.color}`}>
+                  <div className={`text-lg md:text-xl font-bold ${metric.color}`}>
                     {metric.value}
                   </div>
                 </CardContent>
@@ -531,10 +522,8 @@ function BacktestContent() {
             ))}
           </div>
 
-          {/* Charts Row */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Performance Chart */}
-            <Card className="lg:col-span-2 border-border/50 bg-card/50 backdrop-blur-sm shadow-xl">
+            <Card className="lg:col-span-2 card-glass">
               <CardHeader>
                 <CardTitle className="text-lg">
                   Portfolio Performance vs S&P 500
@@ -558,8 +547,7 @@ function BacktestContent() {
               </CardContent>
             </Card>
 
-            {/* Allocation Chart */}
-            <Card className="border-border/50 bg-card/50 backdrop-blur-sm shadow-xl">
+            <Card className="card-flat">
               <CardHeader>
                 <CardTitle className="text-lg">Allocation</CardTitle>
               </CardHeader>
@@ -574,8 +562,7 @@ function BacktestContent() {
             </Card>
           </div>
 
-          {/* Per-Ticker Breakdown Table */}
-          <Card className="border-border/50 bg-card/50 backdrop-blur-sm shadow-xl overflow-hidden">
+          <Card className="card-glass overflow-hidden shadow-xs">
             <CardHeader>
               <CardTitle className="text-lg">Ticker Breakdown</CardTitle>
             </CardHeader>
@@ -603,7 +590,7 @@ function BacktestContent() {
                       key={t.symbol}
                       className="border-b border-border/50 last:border-0 hover:bg-white/5 transition-colors"
                     >
-                      <td className="px-6 py-4 font-semibold text-violet-400">
+                      <td className="px-6 py-4 font-semibold text-blue-400">
                         {t.symbol}
                       </td>
                       <td className="px-6 py-4 text-right">{t.weight}%</td>

@@ -123,8 +123,61 @@
   }
   body {
     @apply bg-background text-foreground;
+    transition: background-color 0.2s ease;
   }
   html {
     @apply font-sans;
   }
+}
+
+/* Branded text selection */
+::selection {
+  background: oklch(0.546 0.245 262.881 / 30%);
+  color: oklch(0.985 0 0);
+}
+
+/* Custom scrollbar for dark mode */
+.dark ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.dark ::-webkit-scrollbar-track {
+  background: transparent;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: oklch(0.371 0 0);
+  border-radius: 4px;
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.439 0 0);
+}
+
+/* Utility: hide scrollbar while keeping scroll functionality */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* Consolidated De-AI Card & Alert utilities */
+.card-glass {
+  @apply border border-border/50 bg-card/50 backdrop-blur-xs rounded-xl shadow-xs;
+}
+
+.card-flat {
+  @apply border border-border bg-card/85 rounded-xl shadow-xs;
+}
+
+.card-interactive {
+  @apply transition-all duration-200 hover:border-blue-500/30 hover:-translate-y-0.5;
+}
+
+.alert-error {
+  @apply p-3 mb-4 rounded-lg bg-red-500/10 border border-red-500/30 text-red-500 text-sm;
+}
+
+.alert-success {
+  @apply p-3 mb-4 rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-400 text-sm;
 }

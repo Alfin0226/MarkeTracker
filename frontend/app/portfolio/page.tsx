@@ -5,27 +5,51 @@ import { fetchPortfolio, fetchPortfolioHistory } from "@/lib/api";
 import PortfolioSummary from "@/components/portfolio-summary";
 import PortfolioTable from "@/components/portfolio-table";
 import PortfolioChart from "@/components/portfolio-chart";
-import PortfolioHistoryTable from "@/components/portfolio-history-table";
-import TradeForm from "@/components/trade-form";
 import ProtectedRoute from "@/components/protected-route";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { RefreshCw, Search } from "lucide-react";
 
+interface Position {
+  symbol: string;
+  shares: number;
+  avg_price: number;
+  current_price: number;
+  value: number;
+  gain_loss: number;
+}
+
+interface PortfolioData {
+  total_value: number;
+  cash_balance: number;
+  created_at?: string;
+  portfolio: Position[];
+}
+
+interface HistoryDataPoint {
+  date: string;
+  total_value: number;
+  cash: number;
+  stock_value: number;
+}
+
 function PortfolioContent() {
-  const [portfolio, setPortfolio] = useState(null);
-  const [history, setHistory] = useState([]);
+  const [portfolio, setPortfolio] = useState<PortfolioData | null>(null);
+  const [history, setHistory] = useState<HistoryDataPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Set default dates: end_date = today, start_date = 3 months ago
+  // Set default dates: end = today, start = 5 days ago (default performance graph is 5d)
   const defaultEndDate = new Date().toISOString().split('T')[0];
-  const defaultStartDate = new Date(new Date().setDate(new Date().getDate() - 90)).toISOString().split('T')[0];
+  const defaultStartDate = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 5);
+    return d.toISOString().split('T')[0];
+  })();
 
   const [startDate, setStartDate] = useState(defaultStartDate);
   const [endDate, setEndDate] = useState(defaultEndDate);
-  const [activeTimeframe, setActiveTimeframe] = useState("3mo");
+  const [activeTimeframe, setActiveTimeframe] = useState("5d");
 
   const handleTimeframeChange = (range: string) => {
     setActiveTimeframe(range);
@@ -52,7 +76,7 @@ function PortfolioContent() {
         start.setFullYear(end.getFullYear() - 2);
         break;
       case 'max':
-        start = (portfolio as any)?.created_at ? new Date((portfolio as any).created_at) : new Date('2020-01-01');
+        start = portfolio?.created_at ? new Date(portfolio.created_at) : new Date('2020-01-01');
         break;
       default:
         start.setMonth(end.getMonth() - 3);
@@ -87,12 +111,12 @@ function PortfolioContent() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
-      <h2 className="text-2xl font-extrabold mb-6 bg-gradient-to-r from-violet-500 to-blue-500 bg-clip-text text-transparent">
+      <h2 className="text-3xl font-extrabold tracking-tight text-foreground mb-8">
         Portfolio
       </h2>
 
       {error && (
-        <div className="p-3 mb-4 rounded-lg bg-red-500/10 border border-red-500/30 text-red-500 text-sm">
+        <div className="alert-error text-center">
           {error}
         </div>
       )}
@@ -100,16 +124,16 @@ function PortfolioContent() {
       {loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
           {[1, 2, 3].map((i) => (
-            <Card key={i} className="border-border/50 bg-card/50">
+            <Card key={i} className="card-flat animate-pulse">
               <CardContent className="pt-6">
-                <div className="h-20 rounded-lg bg-gradient-to-r from-muted/50 to-muted/30 animate-pulse" />
+                <div className="h-20 rounded-lg bg-gradient-to-r from-muted/50 to-muted/30" />
               </CardContent>
             </Card>
           ))}
         </div>
       ) : (
         <>
-          <div className="mb-6">
+          <div className="mb-10">
             <PortfolioSummary
               portfolio={portfolio}
               initialInvestment={initialInvestment}
@@ -117,27 +141,16 @@ function PortfolioContent() {
           </div>
 
           <div className="mb-8">
-            <div className="flex items-center gap-2 mb-4 overflow-x-auto">
-              {['5d', '1mo', '3mo', '6mo', '1y', '2y', 'max'].map((tf) => (
-                <Button
-                  key={tf}
-                  variant={activeTimeframe === tf ? "default" : "outline"}
-                  size="sm"
-                  className={activeTimeframe === tf ? "bg-violet-600 hover:bg-violet-700 text-white" : ""}
-                  onClick={() => handleTimeframeChange(tf)}
-                >
-                  {tf}
-                </Button>
-              ))}
-            </div>
-            <PortfolioChart history={history} />
+            <PortfolioChart 
+              history={history} 
+              activeTimeframe={activeTimeframe}
+              onTimeframeChange={handleTimeframeChange}
+            />
           </div>
 
-          <div className="mb-6">
-            <TradeForm onTradeComplete={loadPortfolio} />
-          </div>
 
-          <Card className="border-border/50 bg-card/50 backdrop-blur-sm overflow-hidden">
+
+          <Card className="card-glass overflow-hidden">
             <CardHeader className="pb-4">
               <CardTitle className="text-lg">Holdings</CardTitle>
             </CardHeader>
@@ -145,35 +158,6 @@ function PortfolioContent() {
               <PortfolioTable portfolio={portfolio} />
             </CardContent>
           </Card>
-
-          <div className="mt-8 border-t border-border/50 pt-8">
-            <div className="flex flex-col sm:flex-row items-center justify-between mb-4 gap-4">
-              <h3 className="text-lg font-semibold">Weekly Equity History</h3>
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground font-medium">From:</span>
-                <Input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => {
-                    setStartDate(e.target.value);
-                    setActiveTimeframe("custom");
-                  }}
-                  className="w-[140px]"
-                />
-                <span className="text-sm text-muted-foreground font-medium">To:</span>
-                <Input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => {
-                    setEndDate(e.target.value);
-                    setActiveTimeframe("custom");
-                  }}
-                  className="w-[140px]"
-                />
-              </div>
-            </div>
-            <PortfolioHistoryTable history={history} />
-          </div>
         </>
       )}
 

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
@@ -20,26 +19,112 @@ import {
   fetchWatchlist,
 } from "@/lib/api";
 import ProtectedRoute from "@/components/protected-route";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Search, Star, TrendingUp, DollarSign, Activity, Briefcase } from "lucide-react";
+import PositionSummary from "@/components/position-summary";
+import TradeModal from "@/components/trade-modal";
+import DetailsAccordion from "@/components/details-accordion";
+import {
+  Search,
+  Star,
+  Maximize2,
+  Settings,
+} from "lucide-react";
 
 interface SearchResult {
   symbol: string;
   name: string;
 }
 
+interface IncomeGridItem {
+  label: string;
+  value: string;
+  css_class: string;
+}
+
+interface StockData {
+  longName?: string;
+  sector?: string;
+  industry?: string;
+  marketCap?: string;
+  website?: string;
+  regularMarketDayLow?: number;
+  regularMarketDayHigh?: number;
+  fiftyTwoWeekLow?: number;
+  fiftyTwoWeekHigh?: number;
+  trailingPE?: number;
+  trailingEps?: number;
+  dividendYield?: number;
+  averageAnalystRating?: string;
+  targetMeanPrice?: number;
+  forecast_price?: number;
+  longBusinessSummary?: string;
+  income_grid_items?: IncomeGridItem[];
+  exchange?: string;
+}
+
+interface OhlcItem {
+  time: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
+
+interface VolumeItem {
+  time: string;
+  value: number;
+  color: string;
+}
+
+interface LineItem {
+  time: string;
+  value: number;
+}
+
+interface ComparisonData {
+  ohlc_data?: OhlcItem[];
+  volume_data?: VolumeItem[];
+  sp500_line_data?: LineItem[];
+  price_change: number;
+  price_change_percent: number | string;
+  end_price: number;
+}
+
+interface WatchlistItem {
+  symbol: string;
+  current_price: number | null;
+  added_at: string;
+}
+
+/* ─── Period map: label → API value ─── */
+const PERIODS: { label: string; value: string }[] = [
+  { label: "1D", value: "1d" },
+  { label: "1W", value: "5d" },
+  { label: "1M", value: "1mo" },
+  { label: "3M", value: "3mo" },
+  { label: "6M", value: "6mo" },
+  { label: "1Y", value: "1y" },
+  { label: "2Y", value: "2y" },
+  { label: "MAX", value: "max" },
+];
+
 function StockDashboardContent() {
   const params = useParams();
-  const symbol = typeof params?.symbol === "string" ? params.symbol.toUpperCase() : "";
+  const symbol =
+    typeof params?.symbol === "string" ? params.symbol.toUpperCase() : "";
   const router = useRouter();
 
-  const [dashboardData, setDashboardData] = useState<any>(null);
-  const [comparisonData, setComparisonData] = useState<any>(null);
+  const [dashboardData, setDashboardData] = useState<StockData | null>(null);
+  const [comparisonData, setComparisonData] = useState<ComparisonData | null>(
+    null
+  );
   const [period, setPeriod] = useState("1y");
   const [showSP500, setShowSP500] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [hoverData, setHoverData] = useState<{
+    aapl: number;
+    sp500: number | null;
+  } | null>(null);
 
   const [search, setSearch] = useState("");
   const [suggestions, setSuggestions] = useState<SearchResult[]>([]);
@@ -51,25 +136,37 @@ function StockDashboardContent() {
   const [isPolling, setIsPolling] = useState(false);
   const [isWatchlisted, setIsWatchlisted] = useState(false);
 
-  const fetchAllData = useCallback(async (sym: string, per: string) => {
-    setError(null);
-    setDashboardData(null);
-    setComparisonData(null);
-    try {
-      const [dashData, compData] = await Promise.all([
-        apiFetchDashboardData(sym),
-        apiFetchComparisonData(sym, per),
-      ]);
-      setDashboardData(dashData);
-      setComparisonData(compData);
-    } catch (err) {
-      setError("Failed to load dashboard data. Please try again.");
-    }
+  // Trade modal state
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalDefaultAction, setModalDefaultAction] = useState<"buy" | "sell">("buy");
+  const [positionRefreshKey, setPositionRefreshKey] = useState(0);
+
+  const bumpRefreshKey = useCallback(() => {
+    setPositionRefreshKey((k) => k + 1);
   }, []);
+
+  // ─── Data fetching ───
+  const fetchAllData = useCallback(
+    async (sym: string, per: string) => {
+      setError(null);
+      setDashboardData(null);
+      setComparisonData(null);
+      try {
+        const [dashData, compData] = await Promise.all([
+          apiFetchDashboardData(sym),
+          apiFetchComparisonData(sym, per),
+        ]);
+        setDashboardData(dashData);
+        setComparisonData(compData);
+      } catch {
+        setError("Failed to load dashboard data. Please try again.");
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     if (symbol) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       fetchAllData(symbol, period);
     }
   }, [symbol, period, fetchAllData]);
@@ -87,7 +184,6 @@ function StockDashboardContent() {
       }
     };
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsPolling(true);
     pollingRef.current = setInterval(pollData, 30000);
 
@@ -105,7 +201,7 @@ function StockDashboardContent() {
     const checkWatchlist = async () => {
       try {
         const data = await fetchWatchlist();
-        const symbols = data.watchlist.map((w: any) => w.symbol);
+        const symbols = data.watchlist.map((w: WatchlistItem) => w.symbol);
         setIsWatchlisted(symbols.includes(symbol));
       } catch {
         // Ignore
@@ -128,28 +224,61 @@ function StockDashboardContent() {
     }
   };
 
+  // ─── Chart setup ───
   useEffect(() => {
     if (!comparisonData || !chartContainerRef.current) return;
+    if (!comparisonData.ohlc_data || comparisonData.ohlc_data.length === 0) return;
 
-    const handleResize = () => {
-      chart.applyOptions({ width: chartContainerRef.current?.clientWidth });
+    const container = chartContainerRef.current;
+
+    // Baseline values: use the opening price of the first visible bar as the baseline (0%)
+    const aaplBaseline = comparisonData.ohlc_data[0].open;
+
+    const normalizedOhlc = comparisonData.ohlc_data.map((d) => ({
+      time: d.time,
+      open: ((d.open - aaplBaseline) / aaplBaseline) * 100,
+      high: ((d.high - aaplBaseline) / aaplBaseline) * 100,
+      low: ((d.low - aaplBaseline) / aaplBaseline) * 100,
+      close: ((d.close - aaplBaseline) / aaplBaseline) * 100,
+    }));
+
+    let normalizedSp500: { time: string | number; value: number }[] = [];
+    if (comparisonData.sp500_line_data && comparisonData.sp500_line_data.length > 0) {
+      const sp500Baseline = comparisonData.sp500_line_data[0].value;
+      normalizedSp500 = comparisonData.sp500_line_data.map((d) => ({
+        time: d.time,
+        value: ((d.value - sp500Baseline) / sp500Baseline) * 100,
+      }));
+    }
+
+    // Toggle logic: when showSP500 is enabled, display percent. Otherwise display absolute prices.
+    const aaplDataToUse = showSP500 ? normalizedOhlc : comparisonData.ohlc_data;
+
+    const latestValues = {
+      aapl: aaplDataToUse[aaplDataToUse.length - 1].close,
+      sp500: showSP500 && normalizedSp500.length > 0 ? normalizedSp500[normalizedSp500.length - 1].value : null,
     };
 
-    const chart = createChart(chartContainerRef.current, {
+    setHoverData(latestValues);
+
+    const handleResize = () => {
+      chart.applyOptions({ width: container.clientWidth });
+    };
+
+    const chart = createChart(container, {
       layout: {
         background: { type: ColorType.Solid, color: "transparent" },
         textColor: "#9ca3af",
       },
       grid: {
-        vertLines: { color: "rgba(255, 255, 255, 0.05)" },
-        horzLines: { color: "rgba(255, 255, 255, 0.05)" },
+        vertLines: { color: "rgba(255, 255, 255, 0.04)" },
+        horzLines: { color: "rgba(255, 255, 255, 0.04)" },
       },
       rightPriceScale: {
         borderVisible: false,
       },
       leftPriceScale: {
-        visible: showSP500,
-        borderVisible: false,
+        visible: false, // Drop left scale entirely
       },
       timeScale: {
         borderVisible: false,
@@ -158,25 +287,38 @@ function StockDashboardContent() {
       crosshair: {
         mode: CrosshairMode.Normal,
       },
-      width: chartContainerRef.current.clientWidth,
-      height: 400,
+      width: container.clientWidth,
+      height: 460,
     });
+
+    const priceFormatOptions = showSP500
+      ? {
+          type: "custom" as const,
+          formatter: (price: number) => {
+            const sign = price > 0 ? "+" : "";
+            return `${sign}${price.toFixed(1)}%`;
+          },
+        }
+      : {
+          type: "price" as const,
+          precision: 2,
+          minMove: 0.01,
+        };
 
     const candlestickSeries = chart.addSeries(CandlestickSeries, {
-      upColor: "#22c55e",
+      upColor: "#10b981",
       downColor: "#ef4444",
       borderVisible: false,
-      wickUpColor: "#22c55e",
+      wickUpColor: "#10b981",
       wickDownColor: "#ef4444",
+      priceFormat: priceFormatOptions,
     });
 
-    if (comparisonData.ohlc_data) {
-      candlestickSeries.setData(comparisonData.ohlc_data);
-    }
+    candlestickSeries.setData(aaplDataToUse);
 
     if (comparisonData.volume_data) {
       const volumeSeries = chart.addSeries(HistogramSeries, {
-        color: "#26a69a",
+        color: "rgba(38, 166, 154, 0.4)",
         priceFormat: { type: "volume" },
         priceScaleId: "",
       });
@@ -186,14 +328,38 @@ function StockDashboardContent() {
       volumeSeries.setData(comparisonData.volume_data);
     }
 
-    if (showSP500 && comparisonData.sp500_line_data) {
-      const sp500Series = chart.addSeries(LineSeries, {
-        color: "#f43f5e",
+    let sp500Series: any = null;
+    if (showSP500 && normalizedSp500.length > 0) {
+      sp500Series = chart.addSeries(LineSeries, {
+        color: "#9ca3af", // Muted neutral gray color
         lineWidth: 2,
-        priceScaleId: "left",
+        priceFormat: {
+          type: "custom",
+          formatter: (price: number) => {
+            const sign = price > 0 ? "+" : "";
+            return `${sign}${price.toFixed(1)}%`;
+          },
+        },
       });
-      sp500Series.setData(comparisonData.sp500_line_data);
+      sp500Series.setData(normalizedSp500);
     }
+
+    chart.subscribeCrosshairMove((param) => {
+      if (!param.time || !param.point) {
+        setHoverData(latestValues);
+        return;
+      }
+
+      const aaplData = param.seriesData.get(candlestickSeries) as any;
+      const sp500Data = showSP500 && sp500Series ? (param.seriesData.get(sp500Series) as any) : null;
+
+      if (aaplData) {
+        setHoverData({
+          aapl: aaplData.close,
+          sp500: sp500Data ? sp500Data.value : null,
+        });
+      }
+    });
 
     chart.timeScale().fitContent();
 
@@ -204,7 +370,6 @@ function StockDashboardContent() {
       chart.remove();
     };
   }, [comparisonData, showSP500]);
-
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value.toUpperCase();
     setSearch(val);
@@ -233,322 +398,267 @@ function StockDashboardContent() {
     setSuggestions([]);
   };
 
-  const renderPeriodPriceChange = () => {
-    if (!comparisonData) return null;
-    const isPositive = comparisonData.price_change >= 0;
-    return (
-      <div
-        className={`inline-flex items-center px-3 py-1 rounded-md font-semibold text-sm ${
-          isPositive
-            ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/30"
-            : "bg-red-500/10 text-red-500 border border-red-500/30"
-        }`}
-      >
-        {isPositive ? "+" : ""}
-        {comparisonData.price_change.toFixed(2)} (
-        {isPositive ? "+" : ""}
-        {comparisonData.price_change_percent}%)
-      </div>
-    );
+  // ─── Fullscreen toggle ───
+  const handleFullscreen = () => {
+    const el = chartContainerRef.current;
+    if (!el) return;
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      el.requestFullscreen?.();
+    }
   };
 
+  // ─── Price change display ───
+  const priceChange = comparisonData?.price_change ?? 0;
+  const priceChangePct = comparisonData?.price_change_percent ?? 0;
+  const isPositive = priceChange >= 0;
+
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
-      {/* Search Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-        <div>
-          <h2 className="text-2xl font-extrabold bg-gradient-to-r from-violet-500 to-blue-500 bg-clip-text text-transparent">
-            Market Dashboard
-          </h2>
-        </div>
-        <div className="relative w-full md:w-80 z-50">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="text"
-              placeholder="Search symbol..."
-              value={search}
-              onChange={handleSearchChange}
-              className="pl-9 bg-card/50 backdrop-blur-sm border-border/50 focus:border-violet-500"
-            />
-          </div>
-      {suggestions.length > 0 && (
-        <ul className="absolute top-full left-0 right-0 mt-1 bg-popover border border-border rounded-lg shadow-xl overflow-hidden max-h-72 overflow-y-auto">
-          {suggestions.map((s) => (
-            <li
-              key={s.symbol}
-              onClick={() => handleSuggestionClick(s.symbol)}
-              className="px-4 py-2.5 cursor-pointer text-sm hover:bg-accent transition-colors border-b border-border/30 last:border-0"
-            >
-              <strong className="text-violet-400">{s.symbol}</strong> - {s.name}
-            </li>
-          ))}
-        </ul>
-      )}
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+      {/* ──── 1. Search bar ──── */}
+      <div className="flex justify-center mb-8">
+        <div className="relative w-full max-w-md z-50">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            id="symbol-search"
+            type="text"
+            placeholder="Search symbol…"
+            value={search}
+            onChange={handleSearchChange}
+            className="pl-9 bg-card/30 ring-1 ring-foreground/5 border-0 focus:ring-ring"
+          />
+          {suggestions.length > 0 && (
+            <ul className="absolute top-full left-0 right-0 mt-1 bg-popover border border-border rounded-lg shadow-xl overflow-hidden max-h-72 overflow-y-auto">
+              {suggestions.map((s) => (
+                <li
+                  key={s.symbol}
+                  onClick={() => handleSuggestionClick(s.symbol)}
+                  className="px-4 py-2.5 cursor-pointer text-sm hover:bg-accent transition-colors border-b border-border/30 last:border-0"
+                >
+                  <strong className="text-foreground">{s.symbol}</strong>
+                  <span className="text-muted-foreground"> — {s.name}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </div>
 
+      {/* ──── Error state ──── */}
       {error && (
-        <div className="p-4 mb-6 rounded-lg bg-red-500/10 border border-red-500/30 text-red-500 text-center">
+        <div className="mb-6 p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-500 text-sm text-center">
           {error}
         </div>
       )}
 
+      {/* ──── Loading skeleton ──── */}
       {!dashboardData && !error && (
-        <div className="flex flex-col space-y-6">
-          <div className="h-32 rounded-xl bg-card/50 border border-border/50 animate-pulse" />
-          <div className="h-96 rounded-xl bg-card/50 border border-border/50 animate-pulse" />
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="h-48 rounded-xl bg-card/50 border border-border/50 animate-pulse" />
-            <div className="h-48 rounded-xl bg-card/50 border border-border/50 animate-pulse" />
-            <div className="h-48 rounded-xl bg-card/50 border border-border/50 animate-pulse" />
+        <div className="flex flex-col space-y-6 animate-pulse">
+          <div className="h-36 rounded-xl bg-card/20" />
+          <div className="h-[460px] rounded-xl bg-card/20" />
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="h-20 rounded-xl bg-card/20" />
+            <div className="h-20 rounded-xl bg-card/20" />
+            <div className="h-20 rounded-xl bg-card/20" />
+            <div className="h-20 rounded-xl bg-card/20" />
           </div>
         </div>
       )}
 
       {dashboardData && (
-        <div className="space-y-6 animate-in fade-in duration-500">
-          {/* Stock Header Card */}
-          <Card className="border-border/50 bg-card/50 backdrop-blur-sm overflow-hidden">
-            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-violet-500 to-blue-500" />
-            <CardContent className="p-6 md:p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-              <div>
-                <div className="flex items-center gap-3 mb-2">
-                  <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
-                    {dashboardData.longName}
-                  </h1>
-                  <span className="px-3 py-1 rounded-md bg-secondary text-secondary-foreground font-semibold text-lg">
-                    {symbol}
-                  </span>
-                </div>
-                <div className="flex items-center gap-3 mt-4">
-                  <Button
-                    variant={isWatchlisted ? "secondary" : "outline"}
-                    size="sm"
-                    onClick={handleWatchlistToggle}
-                    className={`gap-2 ${
-                      isWatchlisted
-                        ? "bg-amber-500/20 text-amber-500 hover:bg-amber-500/30 border-amber-500/30"
-                        : ""
-                    }`}
-                  >
-                    <Star
-                      className={`h-4 w-4 ${isWatchlisted ? "fill-current" : ""}`}
-                    />
-                    {isWatchlisted ? "Watchlisted" : "Add to Watchlist"}
-                  </Button>
-                  {isPolling && (
-                    <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-500 border border-emerald-500/30 text-xs font-bold tracking-wider">
-                      <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                      LIVE
+        <div className="animate-in fade-in duration-500">
+          {/* ──── 2. Flat header ──── */}
+          <div className="flex flex-col sm:flex-row justify-between items-start gap-4 mb-6">
+            <div className="min-w-0">
+              {/* Symbol · Exchange · Live */}
+              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+                <span className="font-semibold">{symbol}</span>
+                {dashboardData.exchange && (
+                  <>
+                    <span className="opacity-40">·</span>
+                    <span>{dashboardData.exchange}</span>
+                  </>
+                )}
+                {isPolling && (
+                  <>
+                    <span className="opacity-40">·</span>
+                    <span className="inline-flex items-center gap-1 text-emerald-500 text-xs font-semibold">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      Live
                     </span>
-                  )}
-                </div>
-              </div>
-
-              <div className="text-left md:text-right">
-                <div className="text-4xl md:text-5xl font-extrabold mb-2 text-foreground">
-                  {comparisonData && typeof comparisonData.end_price === "number"
-                    ? `$${comparisonData.end_price.toFixed(2)}`
-                    : "---"}
-                </div>
-                {renderPeriodPriceChange()}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Chart Section */}
-          <Card className="border-border/50 bg-card/50 backdrop-blur-sm shadow-lg">
-            <CardHeader className="pb-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <CardTitle className="text-xl flex items-center gap-2">
-                <TrendingUp className="h-5 w-5 text-violet-400" />
-                Performance Overview
-              </CardTitle>
-              <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
-                <div className="flex flex-wrap items-center gap-1 bg-secondary/50 p-1 rounded-lg">
-                  {["1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "max"].map((p) => (
-                    <button
-                      key={p}
-                      onClick={() => setPeriod(p)}
-                      className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
-                        period === p
-                          ? "bg-violet-500 text-white shadow-sm"
-                          : "text-muted-foreground hover:text-foreground hover:bg-background/50"
-                      }`}
-                    >
-                      {p.toUpperCase()}
-                    </button>
-                  ))}
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowSP500(!showSP500)}
-                  className={`w-full sm:w-auto text-xs ${
-                    showSP500 ? "border-violet-500/50 text-violet-400" : ""
-                  }`}
-                >
-                  {showSP500 ? "Hide S&P 500" : "Compare S&P 500"}
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[400px] w-full mt-4" ref={chartContainerRef}></div>
-            </CardContent>
-          </Card>
-
-          {/* Metrics Grids */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Briefcase className="h-5 w-5 text-blue-400" />
-                  Key Metrics
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground uppercase tracking-wider">Sector</p>
-                    <p className="font-semibold">{dashboardData.sector || "N/A"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground uppercase tracking-wider">Industry</p>
-                    <p className="font-semibold">{dashboardData.industry || "N/A"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground uppercase tracking-wider">Market Cap</p>
-                    <p className="font-semibold">{dashboardData.marketCap || "N/A"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground uppercase tracking-wider">Website</p>
-                    <a
-                      href={dashboardData.website}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-semibold text-violet-400 hover:text-violet-300 hover:underline"
-                    >
-                      Visit Official
-                    </a>
-                  </div>
-                  <div className="space-y-1 col-span-2">
-                    <p className="text-xs text-muted-foreground uppercase tracking-wider">Day Range</p>
-                    <p className="font-semibold">
-                      ${dashboardData.regularMarketDayLow?.toFixed(2) || "N/A"} - ${dashboardData.regularMarketDayHigh?.toFixed(2) || "N/A"}
-                    </p>
-                  </div>
-                  <div className="space-y-1 col-span-2">
-                    <p className="text-xs text-muted-foreground uppercase tracking-wider">52-Week Range</p>
-                    <p className="font-semibold">
-                      ${dashboardData.fiftyTwoWeekLow?.toFixed(2) || "N/A"} - ${dashboardData.fiftyTwoWeekHigh?.toFixed(2) || "N/A"}
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <DollarSign className="h-5 w-5 text-emerald-400" />
-                  Valuation & Rating
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground uppercase tracking-wider">P/E Ratio (TTM)</p>
-                    <p className="font-semibold">{dashboardData.trailingPE?.toFixed(2) || "N/A"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground uppercase tracking-wider">EPS (TTM)</p>
-                    <p className="font-semibold">{dashboardData.trailingEps?.toFixed(2) || "N/A"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground uppercase tracking-wider">Div Yield</p>
-                    <p className="font-semibold">
-                      {dashboardData.dividendYield ? `${dashboardData.dividendYield.toFixed(2)}%` : "N/A"}
-                    </p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground uppercase tracking-wider">Analyst Rating</p>
-                    <p className="font-semibold capitalize">{dashboardData.averageAnalystRating || "N/A"}</p>
-                  </div>
-                  <div className="space-y-1 col-span-2">
-                    <p className="text-xs text-muted-foreground uppercase tracking-wider">Mean Target Price</p>
-                    <p className="font-semibold">${dashboardData.targetMeanPrice?.toFixed(2) || "N/A"}</p>
-                  </div>
-                  <div className="col-span-2 p-3 mt-2 rounded-lg bg-violet-500/10 border border-violet-500/20">
-                    <p className="text-xs text-violet-400 uppercase tracking-wider font-bold mb-1">
-                      ML Price Forecast (Educational)
-                    </p>
-                    <p className="font-bold text-lg text-foreground">
-                      {dashboardData.forecast_price ? `$${dashboardData.forecast_price.toFixed(2)}` : "Not Available"}
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Business Summary */}
-          <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
-            <CardContent className="pt-6">
-              <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-3">
-                Business Summary
-              </h3>
-              <p className="text-sm leading-relaxed text-foreground/80">
-                {dashboardData.longBusinessSummary || "No summary available."}
-              </p>
-            </CardContent>
-          </Card>
-
-          {/* Income Statement */}
-          <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Activity className="h-5 w-5 text-amber-400" />
-                Quarterly Income Statement
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {dashboardData.income_grid_items && Array.isArray(dashboardData.income_grid_items) && dashboardData.income_grid_items.length > 0 ? (
-                  dashboardData.income_grid_items.map((item: any, idx: number) => (
-                    <div
-                      key={idx}
-                      className={`p-4 rounded-xl border border-border/50 bg-background/50 ${
-                        item.css_class === "positive"
-                          ? "border-l-4 border-l-emerald-500"
-                          : item.css_class === "negative"
-                          ? "border-l-4 border-l-red-500"
-                          : "border-l-4 border-l-blue-500"
-                      }`}
-                    >
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-                        {item.label}
-                      </p>
-                      <p
-                        className={`text-lg font-bold ${
-                          item.css_class === "positive"
-                            ? "text-emerald-500"
-                            : item.css_class === "negative"
-                            ? "text-red-500"
-                            : "text-foreground"
-                        }`}
-                      >
-                        {item.value}
-                      </p>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-muted-foreground text-sm col-span-full py-4">
-                    Income statement data is not available.
-                  </p>
+                  </>
                 )}
               </div>
-            </CardContent>
-          </Card>
+
+              {/* Company name */}
+              <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground mb-2 truncate">
+                {dashboardData.longName || symbol}
+              </h1>
+
+              {/* Massive price */}
+              <p className="text-5xl sm:text-6xl font-mono tabular-nums font-extrabold text-foreground mb-2">
+                {comparisonData &&
+                typeof comparisonData.end_price === "number"
+                  ? `$${comparisonData.end_price.toFixed(2)}`
+                  : "—"}
+              </p>
+
+              {/* Change line */}
+              {comparisonData && (
+                <p
+                  className={`text-sm font-semibold font-mono tabular-nums ${
+                    isPositive ? "text-emerald-500" : "text-red-500"
+                  }`}
+                >
+                  {isPositive ? "▲" : "▼"}{" "}
+                  {Math.abs(priceChange).toFixed(2)} (
+                  {isPositive ? "+" : ""}
+                  {priceChangePct}%) today
+                </p>
+              )}
+            </div>
+
+            {/* Right: star + Buy */}
+            <div className="flex items-center gap-2 shrink-0 mt-2 sm:mt-6">
+              <button
+                onClick={handleWatchlistToggle}
+                className={`p-2 rounded-lg border transition-colors ${
+                  isWatchlisted
+                    ? "border-amber-500/40 bg-amber-500/10 text-amber-500"
+                    : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+                }`}
+                aria-label={
+                  isWatchlisted
+                    ? "Remove from watchlist"
+                    : "Add to watchlist"
+                }
+              >
+                <Star
+                  className={`h-5 w-5 ${
+                    isWatchlisted ? "fill-current" : ""
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+
+          {/* ──── 3. Candlestick chart ──── */}
+          <div className="relative rounded-xl ring-1 ring-foreground/5 bg-card/20 overflow-hidden">
+            {hoverData && (
+              <div className="absolute top-4 left-4 z-10 bg-zinc-950/80 backdrop-blur-md border border-zinc-800 p-3 rounded-lg text-xs font-mono space-y-1.5 shadow-lg pointer-events-none select-none min-w-[140px]">
+                <div className="text-[10px] text-zinc-400 font-semibold uppercase tracking-wider mb-1">
+                  {showSP500 ? "Change (Visible Range)" : "Price"}
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 bg-emerald-500 rounded-full" />
+                    <span className="font-bold text-zinc-200">{symbol}</span>
+                  </div>
+                  <span className={`font-semibold tabular-nums ${
+                    showSP500 
+                      ? (hoverData.aapl >= 0 ? "text-emerald-500" : "text-red-500") 
+                      : "text-zinc-200"
+                  }`}>
+                    {showSP500 
+                      ? `${hoverData.aapl >= 0 ? "+" : ""}${hoverData.aapl.toFixed(2)}%` 
+                      : `$${hoverData.aapl.toFixed(2)}`
+                    }
+                  </span>
+                </div>
+                {showSP500 && hoverData.sp500 !== null && (
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 bg-zinc-400 rounded-full" />
+                      <span className="font-bold text-zinc-200">S&P 500</span>
+                    </div>
+                    <span className={`font-semibold tabular-nums ${hoverData.sp500 >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                      {hoverData.sp500 >= 0 ? "+" : ""}{hoverData.sp500.toFixed(2)}%
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+            <div
+              className="h-[320px] sm:h-[460px] w-full"
+              ref={chartContainerRef}
+            />
+          </div>
+
+          {/* ──── 4. Period pills row ──── */}
+          <div className="flex flex-wrap items-center justify-between gap-3 mt-3 mb-2">
+            <div className="flex flex-wrap items-center gap-1 bg-muted/30 p-1 rounded-lg">
+              {PERIODS.map((p) => (
+                <button
+                  key={p.value}
+                  onClick={() => setPeriod(p.value)}
+                  className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                    period === p.value
+                      ? "bg-foreground text-background shadow-sm"
+                      : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowSP500(!showSP500)}
+                className={`text-xs font-medium transition-colors ${
+                  showSP500
+                    ? "text-rose-500 hover:text-rose-400"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {showSP500 ? "Hide S&P 500" : "Compare to S&P 500"}
+              </button>
+              <button
+                className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                aria-label="Chart settings"
+              >
+                <Settings className="h-4 w-4" />
+              </button>
+              <button
+                onClick={handleFullscreen}
+                className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                aria-label="Fullscreen"
+              >
+                <Maximize2 className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* ──── 5. Position summary ──── */}
+          <PositionSummary
+            symbol={symbol}
+            onBuyClick={() => {
+              setModalDefaultAction("buy");
+              setModalOpen(true);
+            }}
+            onSellClick={() => {
+              setModalDefaultAction("sell");
+              setModalOpen(true);
+            }}
+            refreshKey={positionRefreshKey}
+          />
+
+          {/* ──── 6. Details accordions ──── */}
+          <DetailsAccordion
+            dashboardData={dashboardData}
+            symbol={symbol}
+          />
+
+          {/* ──── 7. Trade modal ──── */}
+          <TradeModal
+            open={modalOpen}
+            onClose={() => setModalOpen(false)}
+            symbol={symbol}
+            currentPrice={comparisonData?.end_price}
+            defaultAction={modalDefaultAction}
+            onComplete={bumpRefreshKey}
+          />
         </div>
       )}
     </div>

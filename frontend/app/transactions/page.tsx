@@ -65,7 +65,7 @@ function TransactionContent() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
-      <h2 className="text-2xl font-extrabold mb-6 bg-gradient-to-r from-violet-500 to-blue-500 bg-clip-text text-transparent">
+      <h2 className="text-2xl font-bold mb-6">
         Transaction History
       </h2>
 
@@ -122,7 +122,7 @@ function TransactionContent() {
                           {t.action}
                         </span>
                       </TableCell>
-                      <TableCell className="font-semibold text-violet-400">
+                      <TableCell className="font-semibold text-blue-400">
                         {t.symbol}
                       </TableCell>
                       <TableCell>{t.shares}</TableCell>

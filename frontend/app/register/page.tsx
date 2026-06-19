@@ -39,7 +39,7 @@ export default function RegisterPage() {
     <div className="min-h-[calc(100vh-3.5rem)] flex items-center justify-center p-6">
       <Card className="w-full max-w-md border-border/50 bg-card/50 backdrop-blur-sm shadow-2xl">
         <CardHeader className="text-center pb-2">
-          <CardTitle className="text-2xl font-bold bg-gradient-to-r from-violet-500 to-blue-500 bg-clip-text text-transparent">
+          <CardTitle className="text-2xl font-bold">
             Create Account
           </CardTitle>
           <p className="text-sm text-muted-foreground mt-1">
@@ -55,7 +55,7 @@ export default function RegisterPage() {
               </div>
               {error.includes("already registered") && (
                 <button
-                  className="mt-2 text-sm font-semibold text-violet-400 hover:text-violet-300 transition-colors"
+                  className="mt-2 text-sm font-semibold text-blue-400 hover:text-blue-300 transition-colors"
                   onClick={() => router.push("/login")}
                 >
                   Go to Login →
@@ -90,7 +90,7 @@ export default function RegisterPage() {
             </div>
             <Button
               type="submit"
-              className="w-full bg-gradient-to-r from-violet-600 to-blue-600 text-white hover:from-violet-700 hover:to-blue-700"
+              className="w-full bg-blue-600 text-white hover:bg-blue-700"
             >
               Create Account
             </Button>
@@ -99,7 +99,7 @@ export default function RegisterPage() {
             Already have an account?{" "}
             <Link
               href="/login"
-              className="font-semibold text-violet-400 hover:text-violet-300 transition-colors"
+              className="font-semibold text-blue-400 hover:text-blue-300 transition-colors"
             >
               Sign In
             </Link>

@@ -15,7 +15,7 @@ interface BacktestAllocationChartProps {
 }
 
 const PALETTE = [
-  "rgba(139, 92, 246, 0.85)",   // violet
+  "rgba(59, 130, 246, 0.85)",    // blue
   "rgba(59, 130, 246, 0.85)",   // blue
   "rgba(16, 185, 129, 0.85)",   // emerald
   "rgba(245, 158, 11, 0.85)",   // amber

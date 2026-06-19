@@ -47,13 +47,13 @@ export default function Navbar() {
         {/* Brand */}
         <Link
           href="/"
-          className="text-lg font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-blue-500 bg-clip-text text-transparent hover:opacity-90 transition-opacity"
+          className="text-lg font-extrabold tracking-tight text-blue-400 hover:opacity-90 transition-opacity"
         >
           MarkeTracker
         </Link>
 
         {/* Nav Links */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 overflow-x-auto scrollbar-none">
           {isAuthenticated ? (
             <>
               <Link href="/dashboard">
@@ -131,7 +131,7 @@ export default function Navbar() {
               <Link href="/register">
                 <Button
                   size="sm"
-                  className="gap-1.5 text-sm font-medium bg-gradient-to-r from-violet-600 to-blue-600 text-white hover:from-violet-700 hover:to-blue-700"
+                  className="gap-1.5 text-sm font-medium bg-blue-600 text-white hover:bg-blue-700"
                 >
                   <UserPlus className="h-4 w-4" />
                   Sign Up

@@ -9,6 +9,9 @@ interface HistoryDataPoint {
   total_value: number;
   cash: number;
   stock_value: number;
+  change_dollar?: number;
+  change_percent?: number;
+  cumulative_return?: number;
 }
 
 interface PortfolioHistoryTableProps {
@@ -26,6 +29,21 @@ export default function PortfolioHistoryTable({ history }: PortfolioHistoryTable
     const initialCash = 1000000;
 
     return sortedHistory.map((point, index) => {
+      // Use backend pre-calculated values if they exist, to handle filtered start-date baselines correctly.
+      if (
+        point.change_dollar !== undefined &&
+        point.change_percent !== undefined &&
+        point.cumulative_return !== undefined
+      ) {
+        return {
+          date: point.date,
+          totalValue: point.total_value,
+          changeDollar: point.change_dollar,
+          changePercent: point.change_percent,
+          cumulativeReturn: point.cumulative_return,
+        };
+      }
+
       const prevValue = index === 0 ? initialCash : sortedHistory[index - 1].total_value;
       const weeklyChangeDollar = point.total_value - prevValue;
       const weeklyChangePercent = prevValue === 0 ? 0 : (weeklyChangeDollar / prevValue) * 100;

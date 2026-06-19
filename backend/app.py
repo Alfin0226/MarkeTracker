@@ -767,26 +767,23 @@ def get_portfolio_history():
         else:
             start_date = end_date - datetime.timedelta(days=90)
 
-        def get_week_start(d):
-            return d - datetime.timedelta(days=d.weekday())
-
-        start_week = get_week_start(start_date)
-        end_week = get_week_start(end_date)
+        # Calculate one extra baseline day before start_date to compute correct baseline PnL.
+        baseline_date = start_date - datetime.timedelta(days=1)
         
-        weeks = []
-        current_w = start_week
-        while current_w <= end_week:
-            weeks.append(current_w)
-            current_w += datetime.timedelta(days=7)
+        days = []
+        current_d = baseline_date
+        while current_d <= end_date:
+            days.append(current_d)
+            current_d += datetime.timedelta(days=1)
 
         transactions = Transaction.query.filter_by(user_id=user.id) \
             .order_by(Transaction.timestamp.asc()).all()
 
         unique_symbols = list(set([t.symbol for t in transactions]))
         
-        # Download daily prices up to end_week + 7 days
-        download_end = end_week + datetime.timedelta(days=8)
-        download_start = start_week - datetime.timedelta(days=7) 
+        # Download daily prices up to end_date + 1 day
+        download_end = end_date + datetime.timedelta(days=2)
+        download_start = baseline_date - datetime.timedelta(days=7) 
         
         closes_df = pd.DataFrame()
         if unique_symbols:
@@ -814,19 +811,18 @@ def get_portfolio_history():
         tx_idx = 0
         num_tx = len(transactions)
 
-        weekly_snapshots = []
-        if not weeks:
+        daily_snapshots = []
+        if not days:
             return jsonify({'history': []})
 
-        for w in weeks:
-            # Friday as last trading day of the week, or up to Sunday
-            w_end_date = w + datetime.timedelta(days=6) # Sunday
-            w_tz_aware_end = datetime.datetime.combine(w_end_date + datetime.timedelta(days=1), datetime.time.min).replace(tzinfo=datetime.timezone.utc)
+        for d in days:
+            # We want transactions up to the end of day d
+            d_tz_aware_end = datetime.datetime.combine(d + datetime.timedelta(days=1), datetime.time.min).replace(tzinfo=datetime.timezone.utc)
             
             while tx_idx < num_tx:
                 t = transactions[tx_idx]
                 t_stamp = t.timestamp.replace(tzinfo=datetime.timezone.utc) if t.timestamp.tzinfo is None else t.timestamp
-                if t_stamp >= w_tz_aware_end:
+                if t_stamp >= d_tz_aware_end:
                     break
                 
                 if t.action == 'buy':
@@ -840,9 +836,9 @@ def get_portfolio_history():
                 tx_idx += 1
 
             stock_value = 0
-            # Get latest available prices for this week
+            # Get latest available prices for this day
             if not closes_df.empty:
-                valid_dates = closes_df.index[closes_df.index <= w_end_date]
+                valid_dates = closes_df.index[closes_df.index <= d]
                 if len(valid_dates) > 0:
                     last_trading_day = valid_dates.max()
                     day_prices = closes_df.loc[last_trading_day]
@@ -850,6 +846,11 @@ def get_portfolio_history():
                     for sym, shares in holdings.items():
                         if shares > 0 and sym in day_prices and pd.notna(day_prices[sym]):
                             stock_value += day_prices[sym] * shares
+                        elif shares > 0:
+                            try:
+                                stock_value += get_stock_price(sym) * shares
+                            except:
+                                pass
                 else:
                     # fallback to cached prices if yfinance misses data
                     for sym, shares in holdings.items():
@@ -858,15 +859,51 @@ def get_portfolio_history():
                                 stock_value += get_stock_price(sym) * shares
                             except:
                                 pass
+            else:
+                for sym, shares in holdings.items():
+                    if shares > 0:
+                        try:
+                            stock_value += get_stock_price(sym) * shares
+                        except:
+                            pass
 
-            weekly_snapshots.append({
-                'date': w_end_date.isoformat(),
+            daily_snapshots.append({
+                'date': d.isoformat(),
                 'cash': round(cash, 2),
                 'stock_value': round(stock_value, 2),
                 'total_value': round(cash + stock_value, 2)
             })
 
-        return jsonify({'history': weekly_snapshots})
+        # Calculate daily changes and cumulative return starting from inception baseline
+        initial_cash = 1000000.0
+        filtered_snapshots = []
+        
+        for idx, snap in enumerate(daily_snapshots):
+            # Calculate prev_value (for baseline day d_idx == 0, we default to initial_cash)
+            if idx == 0:
+                prev_value = initial_cash
+            else:
+                prev_value = daily_snapshots[idx - 1]['total_value']
+                
+            change_dollar = snap['total_value'] - prev_value
+            change_percent = 0.0 if prev_value == 0 else (change_dollar / prev_value) * 100
+            cumulative_return = ((snap['total_value'] - initial_cash) / initial_cash) * 100
+            
+            # Only include the snapshot in response if the day is >= start_date
+            # (this filters out our extra baseline day from the final response)
+            d = days[idx]
+            if d >= start_date:
+                filtered_snapshots.append({
+                    'date': snap['date'],
+                    'cash': snap['cash'],
+                    'stock_value': snap['stock_value'],
+                    'total_value': snap['total_value'],
+                    'change_dollar': round(change_dollar, 2),
+                    'change_percent': round(change_percent, 4),
+                    'cumulative_return': round(cumulative_return, 4)
+                })
+
+        return jsonify({'history': filtered_snapshots})
     except Exception as e:
         logger.error(f"Error computing portfolio history: {str(e)}")
         return jsonify({'error': str(e)}), 500
@@ -1079,7 +1116,5 @@ def backtest_portfolio():
         logger.error(f"Error in backtest: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-
 if __name__ == '__main__':
     app.run(debug=True)
-
