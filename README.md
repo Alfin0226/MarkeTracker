@@ -124,6 +124,15 @@ MarkeTracker/
 
 ---
 
+## AI Usage in Frontend Design
+
+To achieve a modern, responsive, and visually polished dashboard interface, the frontend design process was highly augmented by AI assistance:
+- **UI Prototyping & Layouts**: Used AI to construct modern base layouts, clean dashboards, and responsive structural containers.
+- **Component Scaffolding**: Scaffolded complex React/TSX components (including interactive widgets, custom forms, and dynamic data visualizers) utilizing AI for clean, modular code.
+- **Styling & UX Polish**: Leveraged AI tools to quickly generate and fine-tune styling patterns with Tailwind CSS and shadcn/ui, facilitating smooth interactions and an aesthetic dark-mode experience.
+
+---
+
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
