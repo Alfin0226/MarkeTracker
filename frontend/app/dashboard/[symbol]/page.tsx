@@ -158,23 +158,8 @@ function StockDashboardContent() {
         ]);
         setDashboardData(dashData);
         setComparisonData(compData);
-      } catch (err: any) {
-        console.error("Dashboard fetch error:", err);
-        const isBooting =
-          err.response?.status === 503 ||
-          err.response?.status === 502 ||
-          err.response?.status === 504 ||
-          err.code === "ECONNABORTED" ||
-          err.message === "Network Error" ||
-          err.message?.toLowerCase().includes("timeout") ||
-          err.response?.data?.error?.toLowerCase().includes("unavailable") ||
-          err.response?.data?.error?.toLowerCase().includes("booting");
-
-        if (isBooting) {
-          setError("server booting plz try again");
-        } else {
-          setError("Failed to load dashboard data. Please try again.");
-        }
+      } catch {
+        setError("Failed to load dashboard data. Please try again.");
       }
     },
     []
