@@ -93,8 +93,23 @@ function DashboardSearchContent() {
       try {
         const data = await searchSymbols(query);
         setSuggestions(data);
-      } catch (err) {
-        setError("Failed to fetch suggestions");
+      } catch (err: any) {
+        console.error("Suggestions fetch error:", err);
+        const isBooting =
+          err.response?.status === 503 ||
+          err.response?.status === 502 ||
+          err.response?.status === 504 ||
+          err.code === "ECONNABORTED" ||
+          err.message === "Network Error" ||
+          err.message?.toLowerCase().includes("timeout") ||
+          err.response?.data?.error?.toLowerCase().includes("unavailable") ||
+          err.response?.data?.error?.toLowerCase().includes("booting");
+
+        if (isBooting) {
+          setError("server booting plz try again");
+        } else {
+          setError("Failed to fetch suggestions");
+        }
         setSuggestions([]);
       } finally {
         setIsLoading(false);
