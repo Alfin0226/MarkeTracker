@@ -159,7 +159,7 @@ function StockDashboardContent() {
         setDashboardData(dashData);
         setComparisonData(compData);
       } catch {
-        setError("Failed to load dashboard data. Please try again.");
+        setError("Failed to load dashboard data/Server is booting. Please try again.");
       }
     },
     []
